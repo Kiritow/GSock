@@ -3,12 +3,12 @@
 *   Licensed under MIT
 */
 
-/** Version: 2.1 */
+/** Version: 2.2 Update: 20170815*/
 
 #pragma once
 
 #include <cstdint>
-#include <memory>
+#include <string>
 
 class sock
 {
@@ -20,6 +20,11 @@ public:
     sock& operator = (sock&&);
     ~sock();
 
+    /// Return:
+    /// 0: Connection Established. No Error.
+    /// -1: connect() call error. See errno.
+    /// -2: This socket has been connected before.
+    /// -3: socket() call error. Failed to create socket. See errno.
     int connect(const std::string& IPStr,int Port);
 
     template<typename T>
@@ -28,6 +33,8 @@ public:
     template<typename T>
     int recv(T&);
 
+    /// Return:
+    /// return what send() and recv() call returns.
     int send(const char* Buffer,int Length);
     int recv(char* Buffer,int MaxToRecv);
 
@@ -41,8 +48,8 @@ private:
     sock(int);
     friend class serversock;
 
-    class _impl;
-    std::unique_ptr<_impl> _pp;
+    struct _impl;
+    _impl* _pp;
 };
 
 class serversock
@@ -55,14 +62,28 @@ public:
     serversock& operator = (serversock&&) =delete;
     ~serversock();
 
+    /// Return:
+    /// 0: Bind Succeed. No Error.
+    /// -1: bind() call error. See errno.
+    /// -2: This socket has been created before.
+    /// -3: socket() call error. Failed to create socket. See errno.
     int bind(int Port);
+
     int set_reuse();
+
+    /// Return:
+    /// return what listen() call returns
     int listen(int MaxCount);
 
-    sock&& accept();
+    /// Return:
+    /// 0: Accept Succeed. No Error. _out_s holds the new socket.
+    /// -1: accept() call error. See errno.
+    /// -2: _out_s is a connected socket, which should not be passed in.
+    int accept(sock& _out_s);
 private:
-    class _impl;
-    std::unique_ptr<_impl> _pp;
+    struct _impl;
+    _impl* _pp;
 };
 
+/// Net Tools
 int DNSResolve(const std::string& HostName,std::string& _out_IPStr);

@@ -3,12 +3,22 @@
 *   Licensed under MIT
 */
 
-/** Version: 2.1 */
+/** Version: 2.2 Update: 20170815*/
 
 #include "gsock.h"
 
+#ifdef GSOCK_DEBUG
+#pragma message("GSock Debug mode compiled in")
+#include <cstdio>
+#define myliblog(fmt,args...) printf("GSock: " fmt,##args)
+#else
+#define myliblog(fmt,args...)
+#endif
 
 #ifdef __WIN32__
+/// Using Win8.1
+#define _WIN32_WINNT 0x0603
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -40,8 +50,12 @@ public:
         WSAData wdt;
         wd=MAKEWORD(2,2);
         int ret=WSAStartup(wd,&wdt);
+
+        myliblog("WSAStartup() Returns: %d\n",ret);
+
         if(ret<0)
         {
+            myliblog("WSAGetLastError: %d\n",WSAGetLastError());
             throw std::runtime_error("Unable to load winsock2.dll. ");
         }
 #endif
@@ -51,54 +65,96 @@ public:
         /// Windows Platform need WinSock2.DLL clean up.
 #ifdef __WIN32__
         WSACleanup();
+        myliblog("WSACleanup() called.");
 #endif
     }
 } _init_winsock2_2_obj;
 
 
-class sock::_impl
+struct sock::_impl
 {
-public:
     int sfd;
     sockaddr_in saddr;
+    bool created;
 };
 
 sock::sock() : _pp(new _impl)
 {
-    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    myliblog("sock::sock() %p\n",this);
+
+    _pp->created=false;
 }
 
 //private
 sock::sock(int SocketValue) : _pp(new _impl)
 {
+    myliblog("sock::sock(int) %p\n",this);
+
+    _pp->created=true;
     _pp->sfd=SocketValue;
 }
 
 sock::sock(sock&& tmp)
 {
-    _pp=std::move(tmp._pp);
+    myliblog("sock::sock(sock&&) %p <- %p \n",this,&tmp);
+
+    _pp=tmp._pp;
+    tmp._pp=nullptr;
 }
 
 sock& sock::operator = (sock&& tmp)
 {
+    myliblog("sock::operator = (sock&&) %p <= %p\n",this,&tmp);
+
     if(_pp)
     {
-        closesocket(_pp->sfd);
+        if(_pp->created)
+        {
+            myliblog("Socket closed: [%d] in %p\n",_pp->sfd,this);
+            closesocket(_pp->sfd);
+        }
+
+        delete _pp;
     }
-    _pp=std::move(tmp._pp);
+
+    _pp=tmp._pp;
+    tmp._pp=nullptr;
     return *this;
 }
 
 sock::~sock()
 {
+    myliblog("sock::~sock() %p\n",this);
+
     if(_pp)
     {
-        closesocket(_pp->sfd);
+        if(_pp->created)
+        {
+            myliblog("Socket closed: [%d] in %p\n",_pp->sfd,this);
+            closesocket(_pp->sfd);
+        }
+
+        delete _pp;
     }
 }
 
 int sock::connect(const std::string& IPStr,int Port)
 {
+    myliblog("sock::connect() %p\n",this);
+
+    if(_pp->created)
+    {
+        return -2;
+    }
+    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    if(_pp->sfd<0)
+    {
+        myliblog("socket() returns %d. WSAGetLastError: %d\n",_pp->sfd,WSAGetLastError());
+        return -3;
+    }
+    myliblog("Socket created: [%d] in %p\n",_pp->sfd,this);
+    _pp->created=true;
+
     // refs
     int& sfd=_pp->sfd;
     sockaddr_in& saddr=_pp->saddr;
@@ -107,6 +163,7 @@ int sock::connect(const std::string& IPStr,int Port)
     saddr.sin_addr.s_addr=inet_addr(IPStr.c_str());
     saddr.sin_port=htons(Port);
     saddr.sin_family=AF_INET;
+
     return ::connect(sfd,(sockaddr*)&saddr,sizeof(saddr));
 }
 
@@ -201,25 +258,53 @@ int sock::setrecvtime(int Second)
 
 
 
-class serversock::_impl
+struct serversock::_impl
 {
-public:
     int sfd;
     sockaddr_in saddr;
+    bool created;
 };
 
 serversock::serversock() : _pp(new _impl)
 {
-    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    myliblog("serversock::serversock() %p\n",this);
+
+    _pp->created=false;
 }
 
 serversock::~serversock()
 {
-    closesocket(_pp->sfd);
+    myliblog("serversock::~serversock() %p\n",this);
+
+    if(_pp)
+    {
+        if(_pp->created)
+        {
+            myliblog("Server-Socket closed: [%d] in %p\n",_pp->sfd,this);
+            closesocket(_pp->sfd);
+        }
+
+        delete _pp;
+    }
 }
 
 int serversock::bind(int Port)
 {
+    myliblog("serversock::bind() %p\n",this);
+
+    if(_pp->created)
+    {
+        return -2;
+    }
+    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    if(_pp->sfd<0)
+    {
+        myliblog("socket() returns %d. WSAGetLastError: %d\n",_pp->sfd,WSAGetLastError());
+        return -3;
+    }
+    myliblog("Socket created: [%d] in %p\n",_pp->sfd,this);
+    _pp->created=true;
+
     // refs
     int& sfd=_pp->sfd;
     sockaddr_in& saddr=_pp->saddr;
@@ -248,23 +333,35 @@ int serversock::listen(int MaxCount)
     return ::listen(sfd,MaxCount);
 }
 
-sock&& serversock::accept()
+int serversock::accept(sock& _out_s)
 {
+    if(_out_s._pp->created)
+    {
+        /// _out_s has been connected.
+        return -2;
+    }
+
     sock s;
     int tmp=sizeof(s._pp->saddr);
     int ret=::accept(_pp->sfd,(sockaddr*)&(s._pp->saddr),&tmp);
     if(ret<0)
     {
-        s._pp->sfd=-1;/// Bad Socket
+        /// accept() call failed.
+        myliblog("accept() returns %d. WSAGetLastError: %d\n",ret,WSAGetLastError());
+        return -1;
     }
     else
     {
         s._pp->sfd=ret;
+        s._pp->created=true;
+
+        myliblog("Socket opened: [%d] in %p by serversock %p\n",s._pp->sfd,&s,this);
+
+        /// Move resource.
+        _out_s=std::move(s);
+        return 0;
     }
-    return std::move(s);
 }
-
-
 
 int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 {
@@ -297,3 +394,5 @@ int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
     return -2;
 }
 
+/// Undefine marcos
+#undef myliblog
