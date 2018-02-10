@@ -36,6 +36,7 @@
 using BYTE = unsigned char;
 #endif
 
+#include <cstring> /// memset
 #include <string>
 #include <stdexcept>
 
@@ -183,7 +184,7 @@ int sock::getsendtime(int& _out_Second, int& _out_uSecond)
     int& sfd=_pp->sfd;
 
     struct timeval outtime;
-    int _not_used_t;
+    socklen_t _not_used_t;
     int ret=getsockopt(sfd,SOL_SOCKET,SO_SNDTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
@@ -204,7 +205,7 @@ int sock::getrecvtime(int& _out_Second, int& _out_uSecond)
     int& sfd=_pp->sfd;
 
     struct timeval outtime;
-    int _not_used_t;
+    socklen_t _not_used_t;
     int ret=getsockopt(sfd,SOL_SOCKET,SO_RCVTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
@@ -342,7 +343,7 @@ int serversock::accept(sock& _out_s)
     }
 
     sock s;
-    int tmp=sizeof(s._pp->saddr);
+    socklen_t tmp=sizeof(s._pp->saddr);
     int ret=::accept(_pp->sfd,(sockaddr*)&(s._pp->saddr),&tmp);
     if(ret<0)
     {
