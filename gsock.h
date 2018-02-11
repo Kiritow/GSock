@@ -3,9 +3,8 @@
 *   Licensed under MIT
 */
 
-/** Version: 2.2 Update: 20170815*/
-
-#pragma once
+#ifndef _gsock_h
+#define _gsock_h
 
 #include <cstdint>
 #include <string>
@@ -35,8 +34,8 @@ public:
 
     /// Return:
     /// return what send() and recv() call returns.
-    int send(const char* Buffer,int Length);
-    int recv(char* Buffer,int MaxToRecv);
+    int send(const void* Buffer,int Length);
+    int recv(void* Buffer,int MaxToRecv);
 
     int getsendtime(int& _out_Second,int& _out_uSecond);
     int getrecvtime(int& _out_Second,int& _out_uSecond);
@@ -87,3 +86,5 @@ private:
 
 /// Net Tools
 int DNSResolve(const std::string& HostName,std::string& _out_IPStr);
+
+#endif // _gsock_h

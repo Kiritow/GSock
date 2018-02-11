@@ -168,14 +168,14 @@ int sock::connect(const std::string& IPStr,int Port)
     return ::connect(sfd,(sockaddr*)&saddr,sizeof(saddr));
 }
 
-int sock::send(const char* Buffer,int Length)
+int sock::send(const void* Buffer,int Length)
 {
-    return ::send(_pp->sfd,Buffer,Length,0);
+    return ::send(_pp->sfd,(const char*)Buffer,Length,0);
 }
 
-int sock::recv(char* Buffer,int MaxToRecv)
+int sock::recv(void* Buffer,int MaxToRecv)
 {
-    return ::recv(_pp->sfd,Buffer,MaxToRecv,0);
+    return ::recv(_pp->sfd,(char*)Buffer,MaxToRecv,0);
 }
 
 int sock::getsendtime(int& _out_Second, int& _out_uSecond)
