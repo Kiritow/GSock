@@ -3,19 +3,19 @@
 *   Licensed under MIT
 */
 
-/** Version: 2.2 Update: 20170815*/
+/** See VERSION for version information */
 
 #include "gsock.h"
 
 #ifdef GSOCK_DEBUG
 #pragma message("GSock Debug mode compiled in")
 #include <cstdio>
-#define myliblog(fmt,args...) printf("GSock: " fmt,##args)
+#define myliblog(fmt,...) printf("GSock: " fmt,__VA_ARGS__)
 #else
-#define myliblog(fmt,args...)
+#define myliblog(fmt,...)
 #endif
 
-#ifdef __WIN32__
+#ifdef _WIN32
 /// Using Win8.1
 #define _WIN32_WINNT 0x0603
 
@@ -46,7 +46,7 @@ public:
     _init_winsock2_2_class()
     {
         /// Windows Platform need WinSock2.DLL initialization.
-#ifdef __WIN32__
+#ifdef _WIN32
         WORD wd;
         WSAData wdt;
         wd=MAKEWORD(2,2);
@@ -64,7 +64,7 @@ public:
     ~_init_winsock2_2_class()
     {
         /// Windows Platform need WinSock2.DLL clean up.
-#ifdef __WIN32__
+#ifdef _WIN32
         WSACleanup();
         myliblog("WSACleanup() called.");
 #endif
@@ -81,7 +81,7 @@ struct sock::_impl
 
 sock::sock() : _pp(new _impl)
 {
-    myliblog("sock::sock() %p\n",this);
+	myliblog("sock::sock() %p", this);
 
     _pp->created=false;
 }
@@ -188,7 +188,7 @@ int sock::getsendtime(int& _out_Second, int& _out_uSecond)
     int ret=getsockopt(sfd,SOL_SOCKET,SO_SNDTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
-#ifdef __WIN32__
+#ifdef _WIN32
     _out_Second=outtime.tv_sec/1000;
     _out_uSecond=outtime.tv_usec;
 #else
@@ -209,7 +209,7 @@ int sock::getrecvtime(int& _out_Second, int& _out_uSecond)
     int ret=getsockopt(sfd,SOL_SOCKET,SO_RCVTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
-#ifdef __WIN32__
+#ifdef _WIN32
     _out_Second=outtime.tv_sec/1000;
     _out_uSecond=outtime.tv_usec;
 #else
@@ -227,7 +227,7 @@ int sock::setsendtime(int Second)
 
     struct timeval outtime;
     /// We don't know why, but on Windows, 1 Second means 1000.
-#ifdef __WIN32__
+#ifdef _WIN32
     outtime.tv_sec=Second*1000;
     outtime.tv_usec=0;
 #else
@@ -245,7 +245,7 @@ int sock::setrecvtime(int Second)
 
     struct timeval outtime;
     /// We don't know why, but on Windows, 1 Second means 1000.
-#ifdef __WIN32__
+#ifdef _WIN32
     outtime.tv_sec=Second*1000;
     outtime.tv_usec=0;
 #else
@@ -364,36 +364,119 @@ int serversock::accept(sock& _out_s)
     }
 }
 
+
+
+struct udpsock::_impl
+{
+	int sfd;
+	int lastErr;
+};
+
+udpsock::udpsock() : _pp(new _impl)
+{
+	_pp->sfd = socket(AF_INET, SOCK_DGRAM, 0);
+	_pp->lastErr = 0;
+}
+
+udpsock::udpsock(udpsock&& x)
+{
+	_pp = x._pp;
+	x._pp = nullptr;
+}
+
+udpsock& udpsock::operator=(udpsock&& x)
+{
+	if (_pp)
+	{
+		// Clean up itself.
+		this->~udpsock();
+	}
+	_pp = x._pp;
+	x._pp = nullptr;
+	return *this;
+}
+
+udpsock::~udpsock()
+{
+	closesocket(_pp->sfd);
+	delete _pp;
+}
+
+int udpsock::bind(int Port)
+{
+	sockaddr_in saddr;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(Port);
+	saddr.sin_addr.s_addr = INADDR_ANY;
+	return ::bind(_pp->sfd, (const sockaddr*)&saddr, sizeof(saddr));
+}
+
+int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int length)
+{
+	sockaddr_in saddr;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(Port);
+	saddr.sin_addr.s_addr = inet_addr(IPStr.c_str());
+	return ::sendto(_pp->sfd, (const char*)buffer, length, 0, (const sockaddr*)&saddr, sizeof(saddr));
+}
+
+int udpsock::recvfrom(std::string& fromIP, void* buffer, int bufferLength)
+{
+	sockaddr_in saddr;
+	int saddrlen = sizeof(saddr);
+	int ret = ::recvfrom(_pp->sfd, (char*)buffer, bufferLength, 0, (sockaddr*)&saddr, &saddrlen);
+	
+	if (ret < 0)
+	{
+#ifdef _WIN32
+		_pp->lastErr = WSAGetLastError();
+#else
+		_pp->lastErr = errno;
+#endif
+	}
+
+	fromIP = inet_ntoa(saddr.sin_addr);
+	return ret;
+}
+
+int udpsock::getlasterror()
+{
+	return _pp->lastErr;
+}
+
 int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 {
-    /// Use getaddrinfo instead
-    struct addrinfo hints;
-    memset(&hints,0,sizeof(hints));
-    hints.ai_family=AF_UNSPEC;
-    hints.ai_socktype=SOCK_STREAM;
-    hints.ai_protocol=IPPROTO_TCP;
+	/// Use getaddrinfo instead
+	struct addrinfo hints;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
 
-    struct addrinfo* result=nullptr;
+	struct addrinfo* result = nullptr;
 
-    int ret=getaddrinfo(HostName.c_str(),NULL,&hints,&result);
-    if(ret!=0)
-    {
-        return -1;/// API Call Failed.
-    }
-    for(struct addrinfo* ptr=result; ptr!=nullptr; ptr=ptr->ai_next)
-    {
-        switch(ptr->ai_family)
-        {
-        case AF_INET:
-            sockaddr_in* addr=(struct sockaddr_in*) (ptr->ai_addr) ;
-            _out_IPStr=inet_ntoa(addr->sin_addr);
-            return 0;
-            break;
-        }
-    }
-    /// Unknown error.
-    return -2;
+	int ret = getaddrinfo(HostName.c_str(), NULL, &hints, &result);
+	if (ret != 0)
+	{
+		return -1;/// API Call Failed.
+	}
+	for (struct addrinfo* ptr = result; ptr != nullptr; ptr = ptr->ai_next)
+	{
+		switch (ptr->ai_family)
+		{
+		case AF_INET:
+			sockaddr_in * addr = (struct sockaddr_in*) (ptr->ai_addr);
+			_out_IPStr = inet_ntoa(addr->sin_addr);
+			return 0;
+			break;
+		}
+	}
+	/// Unknown error.
+	return -2;
 }
+
 
 /// Undefine marcos
 #undef myliblog

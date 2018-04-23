@@ -12,7 +12,7 @@
 class sock
 {
 public:
-    sock();
+	sock();
     sock(const sock&)=delete;
     sock& operator = (const sock&)=delete;
     sock(sock&&);
@@ -35,7 +35,7 @@ public:
     /// Return:
     /// return what send() and recv() call returns.
     int send(const void* Buffer,int Length);
-    int recv(void* Buffer,int MaxToRecv);
+	int recv(void* Buffer, int MaxToRecv);
 
     int getsendtime(int& _out_Second,int& _out_uSecond);
     int getrecvtime(int& _out_Second,int& _out_uSecond);
@@ -82,6 +82,30 @@ public:
 private:
     struct _impl;
     _impl* _pp;
+};
+
+class udpsock
+{
+public:
+	udpsock();
+	udpsock(const udpsock&) = delete;
+	udpsock& operator = (const udpsock&) = delete;
+	udpsock(udpsock&&);
+	udpsock& operator = (udpsock&&);
+	~udpsock();
+
+	/// Explict bind() call is only need when you have to receive data.
+	int bind(int Port);
+
+	int sendto(const std::string& IPStr, int Port, const void* buffer, int length);
+
+	/// Must call bind() before calling recvfrom().
+	int recvfrom(std::string& fromIP, void* buffer, int bufferLength);
+	
+	int getlasterror();
+private:
+	struct _impl;
+	_impl* _pp;
 };
 
 /// Net Tools
