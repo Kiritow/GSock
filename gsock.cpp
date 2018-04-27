@@ -469,11 +469,13 @@ int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 		case AF_INET:
 			sockaddr_in * addr = (struct sockaddr_in*) (ptr->ai_addr);
 			_out_IPStr = inet_ntoa(addr->sin_addr);
+			freeaddrinfo(result);
 			return 0;
 			break;
 		}
 	}
 	/// Unknown error.
+	freeaddrinfo(result);
 	return -2;
 }
 
