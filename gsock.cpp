@@ -425,7 +425,7 @@ int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int 
 int udpsock::recvfrom(std::string& fromIP, void* buffer, int bufferLength)
 {
 	sockaddr_in saddr;
-	int saddrlen = sizeof(saddr);
+	socklen_t saddrlen = sizeof(saddr);
 	int ret = ::recvfrom(_pp->sfd, (char*)buffer, bufferLength, 0, (sockaddr*)&saddr, &saddrlen);
 	
 	if (ret < 0)
