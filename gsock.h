@@ -43,6 +43,10 @@ public:
     int setsendtime(int Second);
     int setrecvtime(int Second);
     
+    /// Return:
+    /// 0: Success. No Error.
+    /// -1: getlocalname() or getpeername() call error. See errno.
+    /// -2: Socket not created.
     int getlocal(std::string& IPStr,int& Port);
     int getpeer(std::string& IPStr,int& Port);
 

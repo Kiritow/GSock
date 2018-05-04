@@ -257,26 +257,36 @@ int sock::setrecvtime(int Second)
 }
 
 //forgive me, but writing code in hospital is really not a good experience.
-int sock::getlocal(std::string& IPStr,int& Port)
+typedef int (*_sock_getname_callback_t)(int,sockaddr*,socklen_t*);
+
+static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_callback_t fn)
 {
 	struct sockaddr_in saddr;
 	socklen_t saddrlen=sizeof(saddr);
 	memset(&saddr,0,saddrlen);
-	int ret=getsockname(_pp->sfd,(sockaddr*)&saddr,&saddrlen);
-	IPStr=inet_ntoa(saddr.sin_addr);
-	Port=ntohs(saddr.sin_port);
+	int ret=fn(sfd,(sockaddr*)&saddr,&saddrlen);
+	if(ret<0) return ret; //don't bother errno. stop here.
+	ip=inet_ntoa(saddr.sin_addr);
+	port=ntohs(saddr.sin_port);
 	return ret;
+}
+
+int sock::getlocal(std::string& IPStr,int& Port)
+{
+	if(!(_pp->created))
+	{
+		return -2;
+	}
+	return _sock_getname_call(_pp->sfd,IPStr,Port,getsockname);
 }
 
 int sock::getpeer(std::string& IPStr,int& Port)
 {
-	struct sockaddr_in saddr;
-	socklen_t saddrlen=sizeof(saddr);
-	memset(&saddr,0,saddrlen);
-	int ret=getpeername(_pp->sfd,(sockaddr*)&saddr,&saddrlen);
-	IPStr=inet_ntoa(saddr.sin_addr);
-	Port=ntohs(saddr.sin_port);
-	return ret;
+	if(!(_pp->created))
+	{
+		return -2;
+	}
+	return _sock_getname_call(_pp->sfd,IPStr,Port,getpeername);
 }
 
 struct serversock::_impl
