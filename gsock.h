@@ -42,6 +42,9 @@ public:
 
     int setsendtime(int Second);
     int setrecvtime(int Second);
+    
+    int getlocal(std::string& IPStr,int& Port);
+    int getpeer(std::string& IPStr,int& Port);
 
 private:
     sock(int);

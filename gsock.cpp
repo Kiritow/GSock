@@ -256,8 +256,28 @@ int sock::setrecvtime(int Second)
     return setsockopt(sfd,SOL_SOCKET,SO_RCVTIMEO,(const char*)&outtime,sizeof(outtime));
 }
 
+//forgive me, but writing code in hospital is really not a good experience.
+int sock::getlocal(std::string& IPStr,int& Port)
+{
+	struct sockaddr_in saddr;
+	socklen_t saddrlen=sizeof(saddr);
+	memset(&saddr,0,saddrlen);
+	int ret=getsockname(_pp->sfd,(sockaddr*)&saddr,&saddrlen);
+	IPStr=inet_ntoa(saddr.sin_addr);
+	Port=ntohs(saddr.sin_port);
+	return ret;
+}
 
-
+int sock::getpeer(std::string& IPStr,int& Port)
+{
+	struct sockaddr_in saddr;
+	socklen_t saddrlen=sizeof(saddr);
+	memset(&saddr,0,saddrlen);
+	int ret=getpeername(_pp->sfd,(sockaddr*)&saddr,&saddrlen);
+	IPStr=inet_ntoa(saddr.sin_addr);
+	Port=ntohs(saddr.sin_port);
+	return ret;
+}
 
 struct serversock::_impl
 {
