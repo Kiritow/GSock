@@ -71,121 +71,90 @@ public:
     }
 } _init_winsock2_2_obj;
 
-
-struct sock::_impl
+struct vsock::_impl
 {
-    int sfd;
-    sockaddr_in saddr;
-    bool created;
+	int sfd;
+	bool created;
 };
 
-sock::sock() : _pp(new _impl)
+vsock::vsock() : _vp(new _impl)
 {
-	myliblog("sock::sock() %p", this);
-
-    _pp->created=false;
+	_vp->created=false;
 }
 
-//private
-sock::sock(int SocketValue) : _pp(new _impl)
+vsock::vsock(vsock&& v)
 {
-    myliblog("sock::sock(int) %p\n",this);
-
-    _pp->created=true;
-    _pp->sfd=SocketValue;
+	_vp=v._vp;
+	v._vp=nullptr;
 }
 
-sock::sock(sock&& tmp)
+vsock& vsock::operator = (vsock&& v)
 {
-    myliblog("sock::sock(sock&&) %p <- %p \n",this,&tmp);
-
-    _pp=tmp._pp;
-    tmp._pp=nullptr;
+	this->~vsock();
+	_vp=v._vp;
+	v._vp=nullptr;
+	return *this;
 }
 
-sock& sock::operator = (sock&& tmp)
+vsock::~vsock()
 {
-    myliblog("sock::operator = (sock&&) %p <= %p\n",this,&tmp);
-
-    if(_pp)
-    {
-        if(_pp->created)
-        {
-            myliblog("Socket closed: [%d] in %p\n",_pp->sfd,this);
-            closesocket(_pp->sfd);
-        }
-
-        delete _pp;
-    }
-
-    _pp=tmp._pp;
-    tmp._pp=nullptr;
-    return *this;
-}
-
-sock::~sock()
-{
-    myliblog("sock::~sock() %p\n",this);
-
-    if(_pp)
-    {
-        if(_pp->created)
-        {
-            myliblog("Socket closed: [%d] in %p\n",_pp->sfd,this);
-            closesocket(_pp->sfd);
-        }
-
-        delete _pp;
-    }
+	if(_vp)
+	{
+		if(_vp->created)
+		{
+			myliblog("Socket closed: [%d] in %p\n",_vp->sfd,this);
+			closesocket(_vp->sfd);
+			
+			_vp->created=false;
+		}
+		
+		delete _vp;
+		_vp=nullptr;
+	}
 }
 
 int sock::connect(const std::string& IPStr,int Port)
 {
     myliblog("sock::connect() %p\n",this);
 
-    if(_pp->created)
+    if(_vp->created)
     {
         return -2;
     }
-    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
-    if(_pp->sfd<0)
+    _vp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    if(_vp->sfd<0)
     {
-        myliblog("socket() returns %d. WSAGetLastError: %d\n",_pp->sfd,WSAGetLastError());
+        myliblog("socket() returns %d. WSAGetLastError: %d\n",_vp->sfd,WSAGetLastError());
         return -3;
     }
     myliblog("Socket created: [%d] in %p\n",_pp->sfd,this);
-    _pp->created=true;
-
-    // refs
-    int& sfd=_pp->sfd;
-    sockaddr_in& saddr=_pp->saddr;
+    _vp->created=true;
+    
+    struct sockaddr_in saddr;
 
     memset(&saddr,0,sizeof(saddr));
     saddr.sin_addr.s_addr=inet_addr(IPStr.c_str());
     saddr.sin_port=htons(Port);
     saddr.sin_family=AF_INET;
 
-    return ::connect(sfd,(sockaddr*)&saddr,sizeof(saddr));
+    return ::connect(_vp->sfd,(sockaddr*)&saddr,sizeof(saddr));
 }
 
 int sock::send(const void* Buffer,int Length)
 {
-    return ::send(_pp->sfd,(const char*)Buffer,Length,0);
+    return ::send(_vp->sfd,(const char*)Buffer,Length,0);
 }
 
 int sock::recv(void* Buffer,int MaxToRecv)
 {
-    return ::recv(_pp->sfd,(char*)Buffer,MaxToRecv,0);
+    return ::recv(_vp->sfd,(char*)Buffer,MaxToRecv,0);
 }
 
 int sock::getsendtime(int& _out_Second, int& _out_uSecond)
 {
-    // refs
-    int& sfd=_pp->sfd;
-
     struct timeval outtime;
     socklen_t _not_used_t;
-    int ret=getsockopt(sfd,SOL_SOCKET,SO_SNDTIMEO,(char*)&outtime,&_not_used_t);
+    int ret=getsockopt(_vp->sfd,SOL_SOCKET,SO_SNDTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
@@ -201,12 +170,9 @@ int sock::getsendtime(int& _out_Second, int& _out_uSecond)
 
 int sock::getrecvtime(int& _out_Second, int& _out_uSecond)
 {
-    // refs
-    int& sfd=_pp->sfd;
-
     struct timeval outtime;
     socklen_t _not_used_t;
-    int ret=getsockopt(sfd,SOL_SOCKET,SO_RCVTIMEO,(char*)&outtime,&_not_used_t);
+    int ret=getsockopt(_vp->sfd,SOL_SOCKET,SO_RCVTIMEO,(char*)&outtime,&_not_used_t);
     if(ret<0) return ret;
     /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
@@ -222,9 +188,6 @@ int sock::getrecvtime(int& _out_Second, int& _out_uSecond)
 
 int sock::setsendtime(int Second)
 {
-    // refs
-    int& sfd=_pp->sfd;
-
     struct timeval outtime;
     /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
@@ -235,14 +198,11 @@ int sock::setsendtime(int Second)
     outtime.tv_usec=0;
 #endif
 
-    return setsockopt(sfd,SOL_SOCKET,SO_SNDTIMEO,(const char*)&outtime,sizeof(outtime));
+    return setsockopt(_vp->sfd,SOL_SOCKET,SO_SNDTIMEO,(const char*)&outtime,sizeof(outtime));
 }
 
 int sock::setrecvtime(int Second)
 {
-    // refs
-    int& sfd=_pp->sfd;
-
     struct timeval outtime;
     /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
@@ -253,7 +213,7 @@ int sock::setrecvtime(int Second)
     outtime.tv_usec=0;
 #endif
 
-    return setsockopt(sfd,SOL_SOCKET,SO_RCVTIMEO,(const char*)&outtime,sizeof(outtime));
+    return setsockopt(_vp->sfd,SOL_SOCKET,SO_RCVTIMEO,(const char*)&outtime,sizeof(outtime));
 }
 
 //forgive me, but writing code in hospital is really not a good experience.
@@ -273,108 +233,72 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 
 int sock::getlocal(std::string& IPStr,int& Port)
 {
-	if(!(_pp->created))
+	if(!(_vp->created))
 	{
 		return -2;
 	}
-	return _sock_getname_call(_pp->sfd,IPStr,Port,getsockname);
+	return _sock_getname_call(_vp->sfd,IPStr,Port,getsockname);
 }
 
 int sock::getpeer(std::string& IPStr,int& Port)
 {
-	if(!(_pp->created))
+	if(!(_vp->created))
 	{
 		return -2;
 	}
-	return _sock_getname_call(_pp->sfd,IPStr,Port,getpeername);
-}
-
-struct serversock::_impl
-{
-    int sfd;
-    sockaddr_in saddr;
-    bool created;
-};
-
-serversock::serversock() : _pp(new _impl)
-{
-    myliblog("serversock::serversock() %p\n",this);
-
-    _pp->created=false;
-}
-
-serversock::~serversock()
-{
-    myliblog("serversock::~serversock() %p\n",this);
-
-    if(_pp)
-    {
-        if(_pp->created)
-        {
-            myliblog("Server-Socket closed: [%d] in %p\n",_pp->sfd,this);
-            closesocket(_pp->sfd);
-        }
-
-        delete _pp;
-    }
+	return _sock_getname_call(_vp->sfd,IPStr,Port,getpeername);
 }
 
 int serversock::bind(int Port)
 {
     myliblog("serversock::bind() %p\n",this);
 
-    if(_pp->created)
+    if(_vp->created)
     {
         return -2;
     }
-    _pp->sfd=socket(AF_INET,SOCK_STREAM,0);
-    if(_pp->sfd<0)
+    _vp->sfd=socket(AF_INET,SOCK_STREAM,0);
+    if(_vp->sfd<0)
     {
-        myliblog("socket() returns %d. WSAGetLastError: %d\n",_pp->sfd,WSAGetLastError());
+        myliblog("socket() returns %d. WSAGetLastError: %d\n",_vp->sfd,WSAGetLastError());
         return -3;
     }
-    myliblog("Socket created: [%d] in %p\n",_pp->sfd,this);
-    _pp->created=true;
-
-    // refs
-    int& sfd=_pp->sfd;
-    sockaddr_in& saddr=_pp->saddr;
+    myliblog("Socket created: [%d] in %p\n",_vp->sfd,this);
+    _vp->created=true;
+    
+    sockaddr_in saddr;
 
     memset(&saddr,0,sizeof(saddr));
     saddr.sin_addr.s_addr=INADDR_ANY;
     saddr.sin_port=htons(Port);
     saddr.sin_family=AF_INET;
-    return ::bind(sfd,(sockaddr*)&saddr,sizeof(saddr));
+    return ::bind(_vp->sfd,(sockaddr*)&saddr,sizeof(saddr));
 }
 
 int serversock::set_reuse()
 {
-    // refs
-    int& sfd=_pp->sfd;
-
-    int opt=1;
-    return setsockopt(sfd,SOL_SOCKET,SO_REUSEADDR,(const char*)&opt,sizeof(opt));
+    socklen_t opt=1;
+    return setsockopt(_vp->sfd,SOL_SOCKET,SO_REUSEADDR,(const char*)&opt,sizeof(opt));
 }
 
 int serversock::listen(int MaxCount)
 {
-    // refs
-    int& sfd=_pp->sfd;
-
-    return ::listen(sfd,MaxCount);
+    return ::listen(_vp->sfd,MaxCount);
 }
 
 int serversock::accept(sock& _out_s)
 {
-    if(_out_s._pp->created)
+    if(_out_s._vp->created)
     {
         /// _out_s has been connected.
         return -2;
     }
 
-    sock s;
-    socklen_t tmp=sizeof(s._pp->saddr);
-    int ret=::accept(_pp->sfd,(sockaddr*)&(s._pp->saddr),&tmp);
+    sock s; /// empty socket.
+    sockaddr_in saddr;
+    socklen_t saddrsz=sizeof(saddr);
+    
+    int ret=::accept(_vp->sfd,(sockaddr*)&(saddr),&saddrsz);
     if(ret<0)
     {
         /// accept() call failed.
@@ -383,10 +307,10 @@ int serversock::accept(sock& _out_s)
     }
     else
     {
-        s._pp->sfd=ret;
-        s._pp->created=true;
+        s._vp->sfd=ret;
+        s._vp->created=true;
 
-        myliblog("Socket opened: [%d] in %p by serversock %p\n",s._pp->sfd,&s,this);
+        myliblog("Socket opened: [%d] in %p by serversock %p\n",s._vp->sfd,&s,this);
 
         /// Move resource.
         _out_s=std::move(s);
@@ -394,42 +318,38 @@ int serversock::accept(sock& _out_s)
     }
 }
 
-
-
-struct udpsock::_impl
+udpsock::udpsock()
 {
-	int sfd;
-	int lastErr;
-};
-
-udpsock::udpsock() : _pp(new _impl)
-{
-	_pp->sfd = socket(AF_INET, SOCK_DGRAM, 0);
-	_pp->lastErr = 0;
+	_vp->sfd = socket(AF_INET, SOCK_DGRAM, 0);
+	_vp->created = true;
 }
 
-udpsock::udpsock(udpsock&& x)
+int udpsock::connect(const std::string& IPStr,int Port)
 {
-	_pp = x._pp;
-	x._pp = nullptr;
+	sockaddr_in saddr;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(Port);
+	saddr.sin_addr.s_addr = inet_addr(IPStr.c_str());
+	
+	return ::connect(_vp->sfd,(const sockaddr*)&saddr,sizeof(saddr));
 }
 
-udpsock& udpsock::operator=(udpsock&& x)
+int udpsock::broadcast_at(int Port)
 {
-	if (_pp)
-	{
-		// Clean up itself.
-		this->~udpsock();
-	}
-	_pp = x._pp;
-	x._pp = nullptr;
-	return *this;
+	sockaddr_in saddr;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(Port);
+	saddr.sin_addr.s_addr = INADDR_BROADCAST;
+	
+	return ::connect(_vp->sfd,(const sockaddr*)&saddr,sizeof(saddr));
 }
 
-udpsock::~udpsock()
+int udpsock::set_broadcast()
 {
-	closesocket(_pp->sfd);
-	delete _pp;
+	socklen_t opt=1;
+	return ::setsockopt(_vp->sfd,SOL_SOCKET,SO_BROADCAST,(const char*)&opt,sizeof(opt));
 }
 
 int udpsock::bind(int Port)
@@ -439,7 +359,7 @@ int udpsock::bind(int Port)
 	saddr.sin_family = AF_INET;
 	saddr.sin_port = htons(Port);
 	saddr.sin_addr.s_addr = INADDR_ANY;
-	return ::bind(_pp->sfd, (const sockaddr*)&saddr, sizeof(saddr));
+	return ::bind(_vp->sfd, (const sockaddr*)&saddr, sizeof(saddr));
 }
 
 int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int length)
@@ -449,31 +369,43 @@ int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int 
 	saddr.sin_family = AF_INET;
 	saddr.sin_port = htons(Port);
 	saddr.sin_addr.s_addr = inet_addr(IPStr.c_str());
-	return ::sendto(_pp->sfd, (const char*)buffer, length, 0, (const sockaddr*)&saddr, sizeof(saddr));
+	return ::sendto(_vp->sfd, (const char*)buffer, length, 0, (const sockaddr*)&saddr, sizeof(saddr));
 }
 
-int udpsock::recvfrom(std::string& fromIP, void* buffer, int bufferLength)
+int udpsock::broadcast(int Port,const void* buffer,int length)
+{
+	sockaddr_in saddr;
+	memset(&saddr, 0, sizeof(saddr));
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = htons(Port);
+	saddr.sin_addr.s_addr = INADDR_BROADCAST;
+	return ::sendto(_vp->sfd, (const char*)buffer, length, 0, (const sockaddr*)&saddr, sizeof(saddr));
+}
+
+int udpsock::recvfrom(std::string& fromIP, int& fromPort, void* buffer, int bufferLength)
 {
 	sockaddr_in saddr;
 	socklen_t saddrlen = sizeof(saddr);
-	int ret = ::recvfrom(_pp->sfd, (char*)buffer, bufferLength, 0, (sockaddr*)&saddr, &saddrlen);
+	int ret = ::recvfrom(_vp->sfd, (char*)buffer, bufferLength, 0, (sockaddr*)&saddr, &saddrlen);
 	
 	if (ret < 0)
 	{
-#ifdef _WIN32
-		_pp->lastErr = WSAGetLastError();
-#else
-		_pp->lastErr = errno;
-#endif
+		return ret; /// don't bother errno.
 	}
 
 	fromIP = inet_ntoa(saddr.sin_addr);
+	fromPort = ntohs(saddr.sin_port);
 	return ret;
 }
 
-int udpsock::getlasterror()
+int udpsock::send(const void* buffer,int length)
 {
-	return _pp->lastErr;
+	return ::send(_vp->sfd,(const char*)buffer,length,0);
+}
+
+int udpsock::recv(void* buffer,int bufferLength)
+{
+	return ::recv(_vp->sfd,(char*)buffer,bufferLength,0);
 }
 
 int DNSResolve(const std::string& HostName, std::string& _out_IPStr)

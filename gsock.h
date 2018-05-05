@@ -9,16 +9,25 @@
 #include <cstdint>
 #include <string>
 
-class sock
+class vsock
+{
+protected:
+    vsock();
+    vsock(const vsock&)=delete;
+    vsock& operator = (const vsock&)=delete;
+    vsock(vsock&&);
+    vsock& operator = (vsock&&);
+    ~vsock();
+    
+    vsock(int);
+    
+	struct _impl;
+	_impl* _vp;
+};
+
+class sock : public vsock
 {
 public:
-	sock();
-    sock(const sock&)=delete;
-    sock& operator = (const sock&)=delete;
-    sock(sock&&);
-    sock& operator = (sock&&);
-    ~sock();
-
     /// Return:
     /// 0: Connection Established. No Error.
     /// -1: connect() call error. See errno.
@@ -49,25 +58,13 @@ public:
     /// -2: Socket not created.
     int getlocal(std::string& IPStr,int& Port);
     int getpeer(std::string& IPStr,int& Port);
-
-private:
-    sock(int);
+    
     friend class serversock;
-
-    struct _impl;
-    _impl* _pp;
 };
 
-class serversock
+class serversock : public vsock
 {
 public:
-    serversock();
-    serversock(const serversock&)=delete;
-    serversock& operator = (const serversock&) =delete;
-    serversock(serversock&&)=delete;
-    serversock& operator = (serversock&&) =delete;
-    ~serversock();
-
     /// Return:
     /// 0: Bind Succeed. No Error.
     /// -1: bind() call error. See errno.
@@ -86,30 +83,44 @@ public:
     /// -1: accept() call error. See errno.
     /// -2: _out_s is a connected socket, which should not be passed in.
     int accept(sock& _out_s);
-private:
-    struct _impl;
-    _impl* _pp;
 };
 
-class udpsock
+class udpsock : public vsock
 {
 public:
 	udpsock();
-	udpsock(const udpsock&) = delete;
-	udpsock& operator = (const udpsock&) = delete;
-	udpsock(udpsock&&);
-	udpsock& operator = (udpsock&&);
-	~udpsock();
+	
+	/// Use udp socket as tcp socket. (but of course it is not).
+	/// connect call just copy the target socket data to kernel. See connect() for more info.
+	int connect(const std::string& IPStr,int Port);
+	int broadcast_at(int Port);
+	
+	/// Must be called in broadcast mode.
+	int set_broadcast();
 
 	/// Explict bind() call is only need when you have to receive data.
 	int bind(int Port);
 
 	int sendto(const std::string& IPStr, int Port, const void* buffer, int length);
-
+	int broadcast(int Port,const void* buffer,int length);
 	/// Must call bind() before calling recvfrom().
-	int recvfrom(std::string& fromIP, void* buffer, int bufferLength);
+	int recvfrom(std::string& fromIP, int& fromPort, void* buffer, int bufferLength);
 	
-	int getlasterror();
+    /// send() and recv() should only be called after connect(). Or it will fail.
+	int send(const void* buffer,int length);
+	int recv(void* buffer,int bufferLength);
+};
+
+/// Select
+class selector
+{
+public:
+	selector();
+	void clear();
+	void add_read(const vsock&);
+	void add_write(const vsock&);
+	void add_error(const vsock&);
+	int select(int);
 private:
 	struct _impl;
 	_impl* _pp;
