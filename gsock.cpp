@@ -217,7 +217,7 @@ int sock::setrecvtime(int Second)
 }
 
 //forgive me, but writing code in hospital is really not a good experience.
-typedef int (*_sock_getname_callback_t)(int,sockaddr*,socklen_t*);
+using _sock_getname_callback_t = decltype(getsockname);
 
 static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_callback_t fn)
 {

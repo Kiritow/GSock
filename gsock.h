@@ -15,11 +15,11 @@ protected:
     vsock();
     vsock(const vsock&)=delete;
     vsock& operator = (const vsock&)=delete;
-    vsock(vsock&&);
-    vsock& operator = (vsock&&);
+    vsock(vsock&& v);
+    vsock& operator = (vsock&& v);
     ~vsock();
     
-    vsock(int);
+    //vsock(int);
     
 	struct _impl;
 	_impl* _vp;
