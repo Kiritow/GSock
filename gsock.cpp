@@ -249,22 +249,37 @@ int sock::getpeer(std::string& IPStr,int& Port)
 	return _sock_getname_call(_vp->sfd,IPStr,Port,getpeername);
 }
 
+struct serversock::_impl
+{
+public:
+	static int create_socket(vsock::_impl* _vp)
+	{
+		if (_vp->created)
+		{
+			return -2;
+		}
+		_vp->sfd = socket(AF_INET, SOCK_STREAM, 0);
+		if (_vp->sfd<0)
+		{
+			myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
+			return -3;
+		}
+		myliblog("Socket created: [%d] in %p\n", _vp->sfd, this);
+		_vp->created = true;
+		return 0;
+	}
+};
+
 int serversock::bind(int Port)
 {
     myliblog("serversock::bind() %p\n",this);
 
-    if(_vp->created)
-    {
-        return -2;
-    }
-    _vp->sfd=socket(AF_INET,SOCK_STREAM,0);
-    if(_vp->sfd<0)
-    {
-        myliblog("socket() returns %d. WSAGetLastError: %d\n",_vp->sfd,WSAGetLastError());
-        return -3;
-    }
-    myliblog("Socket created: [%d] in %p\n",_vp->sfd,this);
-    _vp->created=true;
+	if (!_vp->created)
+	{
+		int ret = _impl::create_socket(_vp);
+		if (ret < 0)
+			return ret;
+	}
     
     sockaddr_in saddr;
 
@@ -277,6 +292,12 @@ int serversock::bind(int Port)
 
 int serversock::set_reuse()
 {
+	if (!_vp->created)
+	{
+		int ret = _impl::create_socket(_vp);
+		if (ret < 0)
+			return ret;
+	}
     socklen_t opt=1;
     return setsockopt(_vp->sfd,SOL_SOCKET,SO_REUSEADDR,(const char*)&opt,sizeof(opt));
 }

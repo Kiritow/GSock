@@ -83,6 +83,8 @@ public:
     /// -1: accept() call error. See errno.
     /// -2: _out_s is a connected socket, which should not be passed in.
     int accept(sock& _out_s);
+private:
+	struct _impl;
 };
 
 class udpsock : public vsock
