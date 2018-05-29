@@ -39,6 +39,7 @@ using BYTE = unsigned char;
 #include <cstring> /// memset
 #include <string>
 #include <stdexcept>
+#include <vector>
 
 class _init_winsock2_2_class
 {
@@ -429,6 +430,111 @@ int udpsock::recv(void* buffer,int bufferLength)
 	return ::recv(_vp->sfd,(char*)buffer,bufferLength,0);
 }
 
+// Select
+struct selector::_impl
+{
+	fd_set readset, writeset, errorset;
+	int readsz, writesz, errorsz;
+};
+
+selector::selector() : _pp(new _impl)
+{
+	clear();
+}
+
+selector::~selector()
+{
+	if (_pp)
+	{
+		delete _pp;
+		_pp = nullptr;
+	}
+}
+
+void selector::clear()
+{
+	FD_ZERO(&_pp->readset);
+	FD_ZERO(&_pp->writeset);
+	FD_ZERO(&_pp->errorset);
+	_pp->readsz = _pp->writesz = _pp->errorsz = 0;
+}
+
+void selector::add_read(const vsock& v)
+{
+	if (v._vp->created)
+	{
+		FD_SET(v._vp->sfd, &_pp->readset);
+		++_pp->readsz;
+	}
+}
+
+void selector::add_write(const vsock& v)
+{
+	if (v._vp->created)
+	{
+		FD_SET(v._vp->sfd, &_pp->writeset);
+		++_pp->writesz;
+	}
+}
+
+void selector::add_error(const vsock& v)
+{
+	if (v._vp->created)
+	{
+		FD_SET(v._vp->sfd, &_pp->errorset);
+		++_pp->errorsz;
+	}
+}
+
+int selector::wait_for(int second, int ms)
+{
+	fd_set* pread = (_pp->readsz) ? (&_pp->readset) : NULL;
+	fd_set* pwrite = (_pp->writesz) ? (&_pp->writeset) : NULL;
+	fd_set* perr = (_pp->errorsz) ? (&_pp->errorset) : NULL;
+
+	if (!(pread || pwrite || perr))
+	{
+		return 0;
+	}
+
+	struct timeval tval;
+	tval.tv_sec = second;
+	tval.tv_usec = ms;
+
+	int ndfs = 0;
+	return ::select(ndfs, pread, pwrite, perr, &tval);
+}
+
+int selector::wait()
+{
+	fd_set* pread = (_pp->readsz) ? (&_pp->readset) : NULL;
+	fd_set* pwrite = (_pp->writesz) ? (&_pp->writeset) : NULL;
+	fd_set* perr = (_pp->errorsz) ? (&_pp->errorset) : NULL;
+
+	if (!(pread || pwrite || perr))
+	{
+		return 0;
+	}
+
+	int ndfs = 0;
+	return ::select(ndfs, pread, pwrite, perr, NULL);
+}
+
+bool selector::can_read(const vsock& v)
+{
+	return FD_ISSET(v._vp->sfd, &_pp->readset);
+}
+
+bool selector::can_write(const vsock& v)
+{
+	return FD_ISSET(v._vp->sfd, &_pp->writeset);
+}
+
+bool selector::is_error(const vsock& v)
+{
+	return FD_ISSET(v._vp->sfd, &_pp->errorset);
+}
+
 int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 {
 	/// Use getaddrinfo instead
@@ -465,3 +571,4 @@ int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 
 /// Undefine marcos
 #undef myliblog
+

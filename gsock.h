@@ -23,6 +23,8 @@ protected:
     
 	struct _impl;
 	_impl* _vp;
+
+	friend class selector;
 };
 
 class sock : public vsock
@@ -118,11 +120,21 @@ class selector
 {
 public:
 	selector();
+	~selector();
+
 	void clear();
+
 	void add_read(const vsock&);
 	void add_write(const vsock&);
 	void add_error(const vsock&);
-	int select(int);
+
+	int wait_for(int second, int ms = 0);
+	int wait();
+
+	bool can_read(const vsock&);
+	bool can_write(const vsock&);
+	bool is_error(const vsock&);
+
 private:
 	struct _impl;
 	_impl* _pp;
