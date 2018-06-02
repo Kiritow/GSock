@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class vsock
 {
@@ -35,6 +36,7 @@ public:
     /// -1: connect() call error. See errno.
     /// -2: This socket has been connected before.
     /// -3: socket() call error. Failed to create socket. See errno.
+	/// -4: IP Address invalid.
     int connect(const std::string& IPStr,int Port);
 
     template<typename T>
@@ -62,6 +64,8 @@ public:
     int getpeer(std::string& IPStr,int& Port);
     
     friend class serversock;
+private:
+	struct _impl;
 };
 
 class serversock : public vsock
@@ -92,10 +96,17 @@ private:
 class udpsock : public vsock
 {
 public:
-	udpsock();
+	// use_family:
+	// 0: Auto (Undecided now) (default)
+	// 1: IPv4 (If family cannot be automatically decided, then IPv4 will be the default option)
+	// 2: IPv6
+ 	udpsock(int use_family=0);
 	
 	/// Use udp socket as tcp socket. (but of course it is not).
 	/// connect call just copy the target socket data to kernel. See connect() for more info.
+	/// Return:
+	/// -1: connect() error.
+	/// -4: IP Address Invalid.
 	int connect(const std::string& IPStr,int Port);
 	int broadcast_at(int Port);
 	
@@ -113,6 +124,9 @@ public:
     /// send() and recv() should only be called after connect(). Or it will fail.
 	int send(const void* buffer,int length);
 	int recv(void* buffer,int bufferLength);
+private:
+	struct _impl;
+	_impl* _pp;
 };
 
 /// Select
@@ -141,6 +155,16 @@ private:
 };
 
 /// Net Tools
+// Return:
+// -1: getaddrinfo() call failed.
+// Other: Number of fetched results from getaddrinfo() call.
+int DNSResolve(const std::string& HostName, std::vector<std::string>& _out_IPStrVec);
+
+// A wrapper of DNSResolve(...,std::vector<std::string>&)
+// Return:
+// -1: getaddrinfo() call failed.
+// -2: Failed to resolve. (No results in vector)
+// 0: Success.
 int DNSResolve(const std::string& HostName,std::string& _out_IPStr);
 
 #endif // _gsock_h
