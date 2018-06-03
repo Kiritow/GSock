@@ -76,6 +76,13 @@ private:
 class serversock : public vsock
 {
 public:
+	// use_family:
+	// 0: Auto (Undecided now) (default)
+	// 1: IPv4 (If family cannot be automatically decided, then IPv4 will be the default option)
+	// 2: IPv6
+	serversock(int use_family=0);
+	~serversock();
+
     /// Return:
     /// 0: Bind Succeed. No Error.
     /// -1: bind() call error. See errno.
@@ -96,6 +103,7 @@ public:
     int accept(sock& _out_s);
 private:
 	struct _impl;
+	_impl* _pp;
 };
 
 class udpsock : public vsock
@@ -106,6 +114,7 @@ public:
 	// 1: IPv4 (If family cannot be automatically decided, then IPv4 will be the default option)
 	// 2: IPv6
  	udpsock(int use_family=0);
+	~udpsock();
 	
 	/// Use udp socket as tcp socket. (but of course it is not).
 	/// connect call just copy the target socket data to kernel. See connect() for more info.

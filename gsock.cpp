@@ -345,13 +345,16 @@ int sock::getpeer(std::string& IPStr,int& Port)
 struct serversock::_impl
 {
 public:
-	static int create_socket(vsock::_impl* _vp)
+	int protocol;
+	bool is_protocol_decided;
+
+	int create_socket(vsock::_impl* _vp)
 	{
 		if (_vp->created)
 		{
 			return GSOCK_INVALID_SOCKET;
 		}
-		_vp->sfd = socket(AF_INET, SOCK_STREAM, 0);
+		_vp->sfd = socket(protocol, SOCK_STREAM, 0);
 		if (_vp->sfd<0)
 		{
 			myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
@@ -363,31 +366,77 @@ public:
 	}
 };
 
+serversock::serversock(int use_family) :_pp(new _impl)
+{
+	if (use_family==1)
+	{
+		_pp->protocol = AF_INET;
+		_pp->is_protocol_decided = true;
+		myliblog("Protocol decided to %s in serversock %p\n", get_family_name(_pp->protocol), this);
+	}
+	else if (use_family == 2)
+	{
+		_pp->protocol = AF_INET6;
+		_pp->is_protocol_decided = true;
+		myliblog("Protocol decided to %s in serversock %p\n", get_family_name(_pp->protocol), this);
+	}
+	else
+	{
+		_pp->is_protocol_decided = false;
+	}
+}
+
 int serversock::bind(int Port)
 {
     myliblog("serversock::bind() %p\n",this);
 
 	if (!_vp->created)
 	{
-		int ret = _impl::create_socket(_vp);
+		if (!_pp->is_protocol_decided)
+		{
+			_pp->protocol = AF_INET;
+			_pp->is_protocol_decided = true;
+			myliblog("Protocol decided to %s in serversock %p\n", get_family_name(_pp->protocol), this);
+		}
+		int ret = _pp->create_socket(_vp);
 		if (ret < 0)
 			return ret;
 	}
     
-    sockaddr_in saddr;
+	if (_pp->protocol == AF_INET)
+	{
+		sockaddr_in saddr;
 
-    memset(&saddr,0,sizeof(saddr));
-    saddr.sin_addr.s_addr=INADDR_ANY;
-    saddr.sin_port=htons(Port);
-    saddr.sin_family=AF_INET;
-    return ::bind(_vp->sfd,(sockaddr*)&saddr,sizeof(saddr));
+		memset(&saddr, 0, sizeof(saddr));
+		saddr.sin_addr.s_addr = INADDR_ANY;
+		saddr.sin_port = htons(Port);
+		saddr.sin_family = AF_INET;
+		return ::bind(_vp->sfd, (sockaddr*)&saddr, sizeof(saddr));
+	}
+	else
+	{
+		sockaddr_in6 saddr;
+
+		memset(&saddr, 0, sizeof(saddr));
+		saddr.sin6_addr = in6addr_any;
+		saddr.sin6_port = htons(Port);
+		saddr.sin6_family = AF_INET6;
+		return ::bind(_vp->sfd, (sockaddr*)&saddr, sizeof(saddr));
+	}
 }
 
 int serversock::set_reuse()
 {
 	if (!_vp->created)
 	{
-		int ret = _impl::create_socket(_vp);
+		if (!_pp->is_protocol_decided)
+		{
+			_pp->protocol = AF_INET;
+			_pp->is_protocol_decided = true;
+			myliblog("Protocol decided to %s in serversock %p\n", get_family_name(_pp->protocol), this);
+		}
+
+		int ret = _pp->create_socket(_vp);
 		if (ret < 0)
 			return ret;
 	}
@@ -397,22 +446,38 @@ int serversock::set_reuse()
 
 int serversock::listen(int MaxCount)
 {
+	if (!_vp->created)
+	{
+		// Socket is not created. Call bind() first.
+		return GSOCK_INVALID_SOCKET;
+	}
     return ::listen(_vp->sfd,MaxCount);
 }
 
 int serversock::accept(sock& _out_s)
 {
-    if(_out_s._vp->created)
+    if( (!_vp->created) || (_out_s._vp->created) )
     {
         /// _out_s has been connected.
         return GSOCK_INVALID_SOCKET;
     }
 
     sock s; /// empty socket.
+
     sockaddr_in saddr;
-    socklen_t saddrsz=sizeof(saddr);
+	sockaddr_in6 saddr6;
+	socklen_t saddrsz = (_pp->protocol == AF_INET) ? sizeof(saddr) : sizeof(saddr6);
     
-    int ret=::accept(_vp->sfd,(sockaddr*)&(saddr),&saddrsz);
+	int ret;
+	if (_pp->protocol == AF_INET)
+	{
+		ret= ::accept(_vp->sfd, (sockaddr*)&(saddr), &saddrsz);
+	}
+	else
+	{
+		ret = ::accept(_vp->sfd, (sockaddr*)&(saddr6), &saddrsz);
+	}
+	
     if(ret<0)
     {
         /// accept() call failed.
@@ -489,6 +554,15 @@ udpsock::udpsock(int use_family) : _pp(new _impl)
 	else
 	{
 		_pp->is_protocol_decided = false;
+	}
+}
+
+udpsock::~udpsock()
+{
+	if (_pp)
+	{
+		delete _pp;
+		_pp = nullptr;
 	}
 }
 
