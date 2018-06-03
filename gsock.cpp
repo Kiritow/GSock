@@ -130,7 +130,7 @@ int sock::_impl::connect_ipv4(vsock::_impl* _vp, const std::string& IPStr, int P
 	memset(&saddr, 0, sizeof(saddr));
 	if (inet_pton(AF_INET, IPStr.c_str(), &(saddr.sin_addr.s_addr)) != 1)
 	{
-		return -4;
+		return GSOCK_INVALID_IP;
 	}
 	saddr.sin_port = htons(Port);
 	saddr.sin_family = AF_INET;
@@ -140,12 +140,13 @@ int sock::_impl::connect_ipv4(vsock::_impl* _vp, const std::string& IPStr, int P
 	if (_vp->sfd<0)
 	{
 		myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
-		return -3;
+		return GSOCK_ERROR_CREAT;
 	}
 
 	myliblog("Socket <IPv4> created: [%d] with _vp %p\n", _vp->sfd, _vp);
 	_vp->created = true;
 
+	// only returns -1 or 0
 	return ::connect(_vp->sfd, (sockaddr*)&saddr, sizeof(saddr));
 }
 
@@ -156,7 +157,7 @@ int sock::_impl::connect_ipv6(vsock::_impl* _vp, const std::string& IPStr, int P
 	memset(&saddr, 0, sizeof(saddr));
 	if (inet_pton(AF_INET6, IPStr.c_str(), &(saddr.sin6_addr)) != 1)
 	{
-		return -4;
+		return GSOCK_INVALID_IP;
 	}
 	saddr.sin6_port = htons(Port);
 	saddr.sin6_family = AF_INET6;
@@ -166,7 +167,7 @@ int sock::_impl::connect_ipv6(vsock::_impl* _vp, const std::string& IPStr, int P
 	if (_vp->sfd<0)
 	{
 		myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
-		return -3;
+		return GSOCK_ERROR_CREAT;
 	}
 
 	myliblog("Socket <IPv6> created: [%d] with _vp %p\n", _vp->sfd, _vp);
@@ -181,7 +182,7 @@ int sock::connect(const std::string& IPStr,int Port)
 
     if(_vp->created)
     {
-        return -2;
+        return GSOCK_INVALID_SOCKET;
     }
 
 	if (IPStr.find(":") != std::string::npos)
@@ -291,12 +292,12 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 		{
 			ip = std::string(ip_buff);
 			port = ntohs(paddr->sin_port);
-			return 0;
+			return GSOCK_OK;
 		}
 		else
 		{
 			// inet_ntop call failed.
-			return -3;
+			return GSOCK_ERROR_NTOP;
 		}
 	}
 	else if (saddr.sa_family == AF_INET6)
@@ -308,18 +309,18 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 		{
 			ip = std::string(ip_buff);
 			port = ntohs(paddr->sin6_port);
-			return 0;
+			return GSOCK_OK;
 		}
 		else
 		{
 			// inet_ntop call failed.
-			return -3;
+			return GSOCK_ERROR_NTOP;
 		}
 	}
 	else
 	{
 		// protocol not supported.
-		return -4;
+		return GSOCK_UNKNOWN_PROTOCOL;
 	}
 }
 
@@ -327,7 +328,7 @@ int sock::getlocal(std::string& IPStr,int& Port)
 {
 	if(!(_vp->created))
 	{
-		return -2;
+		return GSOCK_INVALID_SOCKET;
 	}
 	return _sock_getname_call(_vp->sfd,IPStr,Port,getsockname);
 }
@@ -336,7 +337,7 @@ int sock::getpeer(std::string& IPStr,int& Port)
 {
 	if(!(_vp->created))
 	{
-		return -2;
+		return GSOCK_INVALID_SOCKET;
 	}
 	return _sock_getname_call(_vp->sfd,IPStr,Port,getpeername);
 }
@@ -348,17 +349,17 @@ public:
 	{
 		if (_vp->created)
 		{
-			return -2;
+			return GSOCK_INVALID_SOCKET;
 		}
 		_vp->sfd = socket(AF_INET, SOCK_STREAM, 0);
 		if (_vp->sfd<0)
 		{
 			myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
-			return -3;
+			return GSOCK_ERROR_CREAT;
 		}
 		myliblog("Socket created: [%d] with _vp %p\n", _vp->sfd, _vp);
 		_vp->created = true;
-		return 0;
+		return GSOCK_OK;
 	}
 };
 
@@ -404,7 +405,7 @@ int serversock::accept(sock& _out_s)
     if(_out_s._vp->created)
     {
         /// _out_s has been connected.
-        return -2;
+        return GSOCK_INVALID_SOCKET;
     }
 
     sock s; /// empty socket.
@@ -416,7 +417,7 @@ int serversock::accept(sock& _out_s)
     {
         /// accept() call failed.
         myliblog("accept() returns %d. WSAGetLastError: %d\n",ret,WSAGetLastError());
-        return -1;
+        return GSOCK_API_ERROR;
     }
     else
     {
@@ -427,7 +428,7 @@ int serversock::accept(sock& _out_s)
 
         /// Move resource.
         _out_s=std::move(s);
-        return 0;
+        return GSOCK_OK;
     }
 }
 
@@ -440,13 +441,17 @@ struct udpsock::_impl
 	{
 		if (_vp->created)
 		{
-			return -2;
+			return GSOCK_INVALID_SOCKET;
 		}
 		else
 		{
 			_vp->sfd = socket(protocol, SOCK_DGRAM, 0);
+			if (_vp->sfd < 0)
+			{
+				return GSOCK_ERROR_CREAT;
+			}
 			_vp->created = true;
-			return 0;
+			return GSOCK_OK;
 		}
 	}
 };
@@ -577,14 +582,18 @@ int udpsock::connect(const std::string& IPStr,int Port)
 
 	if (ret < 0)
 	{
-		return -4;
+		return GSOCK_INVALID_IP;
 	}
 	else
 	{
 		_pp->protocol = (ret == 0) ? (AF_INET) : (AF_INET6);
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret == GSOCK_ERROR_CREAT)
+		{
+			return cret;
+		}
 	}
 	
 	return ::connect(_vp->sfd, (const sockaddr*)paddr, addrsz);
@@ -615,7 +624,11 @@ int udpsock::broadcast_at(int Port)
 		_pp->protocol = AF_INET;
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 		return broadcast_at(Port);
 	}
 }
@@ -632,7 +645,11 @@ int udpsock::set_broadcast()
 		_pp->protocol = AF_INET;
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 		return set_broadcast();
 	}
 }
@@ -667,7 +684,11 @@ int udpsock::bind(int Port)
 		_pp->protocol = AF_INET;
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 		return bind(Port);
 	}
 }
@@ -690,7 +711,11 @@ int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int 
 		_pp->protocol = (ret == 0) ? (AF_INET) : (AF_INET6);
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 	}
 
 	return ::sendto(_vp->sfd, (const char*)buffer, length, 0, (const sockaddr*)paddr, addrsz);
@@ -720,7 +745,11 @@ int udpsock::broadcast(int Port,const void* buffer,int length)
 		_pp->protocol = AF_INET;
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 
 		return broadcast(Port, buffer, length);
 	}
@@ -738,10 +767,18 @@ int udpsock::recvfrom(std::string& fromIP, int& fromPort, void* buffer, int buff
 
 			if (ret < 0)
 			{
-				return ret; /// don't bother errno.
+				return GSOCK_API_ERROR; /// don't bother errno.
 			}
 
-			convertback_ipv46((const sockaddr*)&saddr, fromIP);
+			int cret = convertback_ipv46((const sockaddr*)&saddr, fromIP);
+			if (cret == -1)
+			{
+				return GSOCK_ERROR_NTOP;
+			}
+			else if (cret == -2)
+			{
+				return GSOCK_UNKNOWN_PROTOCOL;
+			}
 			fromPort = ntohs(saddr.sin_port);
 			return ret;
 		}
@@ -756,7 +793,15 @@ int udpsock::recvfrom(std::string& fromIP, int& fromPort, void* buffer, int buff
 				return ret; /// don't bother errno.
 			}
 
-			convertback_ipv46((const sockaddr*)&saddr, fromIP);
+			int cret = convertback_ipv46((const sockaddr*)&saddr, fromIP);
+			if (cret == -1)
+			{
+				return GSOCK_ERROR_NTOP;
+			}
+			else if (cret == -2)
+			{
+				return GSOCK_UNKNOWN_PROTOCOL;
+			}
 			fromPort = ntohs(saddr.sin6_port);
 			return ret;
 		}
@@ -766,7 +811,11 @@ int udpsock::recvfrom(std::string& fromIP, int& fromPort, void* buffer, int buff
 		_pp->protocol = AF_INET;
 		_pp->is_protocol_decided = true;
 		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		int cret = _pp->make_decided(_vp);
+		if (cret < 0)
+		{
+			return cret;
+		}
 		return recvfrom(fromIP, fromPort, buffer, bufferLength);
 	}
 }
@@ -779,11 +828,8 @@ int udpsock::send(const void* buffer,int length)
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
-		return send(buffer, length);
+		// if protocol is not decided, then socket is invalid. (Not Created)
+		return GSOCK_INVALID_SOCKET;
 	}
 }
 
@@ -795,11 +841,8 @@ int udpsock::recv(void* buffer,int bufferLength)
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
-		return recv(buffer, bufferLength);
+		// same as udpsock::send
+		return GSOCK_INVALID_SOCKET;
 	}
 }
 

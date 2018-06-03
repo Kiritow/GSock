@@ -10,6 +10,17 @@
 #include <string>
 #include <vector>
 
+enum
+{
+	GSOCK_OK = 0,
+	GSOCK_API_ERROR = -1, // API call failed, See Errno
+	GSOCK_INVALID_SOCKET = -2, // Invalid socket
+	GSOCK_ERROR_CREAT = -3, // Socket cannot be created, See Errno
+	GSOCK_INVALID_IP = -4, // Invalid IP Address (IPv4,IPv6)
+	GSOCK_UNKNOWN_PROTOCOL = -5, // Unknown Protocol
+	GSOCK_ERROR_NTOP = -6, // inet_ntop failed.
+};
+
 class vsock
 {
 protected:
@@ -38,12 +49,6 @@ public:
     /// -3: socket() call error. Failed to create socket. See errno.
 	/// -4: IP Address invalid.
     int connect(const std::string& IPStr,int Port);
-
-    template<typename T>
-    int send(const T&);
-
-    template<typename T>
-    int recv(T&);
 
     /// Return:
     /// return what send() and recv() call returns.
