@@ -522,7 +522,13 @@ struct udpsock::_impl
 	int protocol;
 	bool is_protocol_decided;
 
-	int make_decided(vsock::_impl* _vp)
+    _impl()
+    {
+        is_protocol_decided = false;
+    }
+
+    // This function is now an internal function and should not be called outside _impl.
+	int _make_decided(vsock::_impl* _vp)
 	{
 		if (_vp->created)
 		{
@@ -539,24 +545,45 @@ struct udpsock::_impl
 			return GSOCK_OK;
 		}
 	}
+
+    int try_decide(vsock::_impl* _vp, int in_protocol)
+    {
+        if (is_protocol_decided)
+        {
+            if (in_protocol == protocol)
+            {
+                return GSOCK_OK;
+            }
+            else
+            {
+                return GSOCK_MISMATCH_PROTOCOL;
+            }
+        }
+
+        protocol = in_protocol;
+
+        // Try it
+        int ret = _make_decided(_vp);
+        if (ret == GSOCK_OK)
+        {
+            is_protocol_decided = true;
+            myliblog("Protocol decided to %s in udpsock with _vp %p \n", get_family_name(protocol), _vp);
+        }
+        return ret;
+    }
+
 };
 
 udpsock::udpsock(int use_family) : _pp(new _impl)
 {
-	
 	if (use_family == 1)
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+		_pp->try_decide(_vp, AF_INET);
+        myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
 	}
 	else if (use_family == 2)
 	{
-		_pp->protocol = AF_INET6;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		_pp->make_decided(_vp);
+        _pp->try_decide(_vp, AF_INET6);
 	}
 	else
 	{
@@ -665,17 +692,12 @@ int udpsock::connect(const std::string& IPStr,int Port)
 	{
 		return GSOCK_INVALID_IP;
 	}
-	else
-	{
-		_pp->protocol = (ret == 0) ? (AF_INET) : (AF_INET6);
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret == GSOCK_ERROR_CREAT)
-		{
-			return cret;
-		}
-	}
+	
+    int cret = _pp->try_decide(_vp, (ret == 0) ? (AF_INET) : (AF_INET6));
+    if (cret < 0)
+    {
+        return cret;
+    }
 	
 	return ::connect(_vp->sfd, (const sockaddr*)paddr, addrsz);
 }
@@ -702,15 +724,13 @@ int udpsock::broadcast_at(int Port)
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
+        int cret = _pp->try_decide(_vp, AF_INET);
 		if (cret < 0)
 		{
 			return cret;
 		}
-		return broadcast_at(Port);
+        
+        return broadcast_at(Port);
 	}
 }
 
@@ -723,14 +743,12 @@ int udpsock::set_broadcast()
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret < 0)
-		{
-			return cret;
-		}
+        int cret = _pp->try_decide(_vp, AF_INET);
+        if (cret < 0)
+        {
+            return cret;
+        }
+
 		return set_broadcast();
 	}
 }
@@ -762,14 +780,12 @@ int udpsock::bind(int Port)
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret < 0)
-		{
-			return cret;
-		}
+        int cret = _pp->try_decide(_vp, AF_INET);
+        if (cret < 0)
+        {
+            return cret;
+        }
+
 		return bind(Port);
 	}
 }
@@ -785,19 +801,14 @@ int udpsock::sendto(const std::string& IPStr, int Port, const void* buffer, int 
 		(_pp->is_protocol_decided) ? ((_pp->protocol == AF_INET) ? 0 : 1) : -1);
 	if (ret < 0)
 	{
-		return -4;
+		return GSOCK_INVALID_IP;
 	}
-	else
-	{
-		_pp->protocol = (ret == 0) ? (AF_INET) : (AF_INET6);
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret < 0)
-		{
-			return cret;
-		}
-	}
+
+    int cret = _pp->try_decide(_vp, AF_INET);
+    if (cret < 0)
+    {
+        return cret;
+    }
 
 	return ::sendto(_vp->sfd, (const char*)buffer, length, 0, (const sockaddr*)paddr, addrsz);
 }
@@ -823,14 +834,11 @@ int udpsock::broadcast(int Port,const void* buffer,int length)
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret < 0)
-		{
-			return cret;
-		}
+        int cret = _pp->try_decide(_vp, AF_INET);
+        if (cret < 0)
+        {
+            return cret;
+        }
 
 		return broadcast(Port, buffer, length);
 	}
@@ -889,14 +897,12 @@ int udpsock::recvfrom(std::string& fromIP, int& fromPort, void* buffer, int buff
 	}
 	else
 	{
-		_pp->protocol = AF_INET;
-		_pp->is_protocol_decided = true;
-		myliblog("Protocol decided to %s in udpsock %p\n", get_family_name(_pp->protocol), this);
-		int cret = _pp->make_decided(_vp);
-		if (cret < 0)
-		{
-			return cret;
-		}
+        int cret = _pp->try_decide(_vp, AF_INET);
+        if (cret < 0)
+        {
+            return cret;
+        }
+
 		return recvfrom(fromIP, fromPort, buffer, bufferLength);
 	}
 }

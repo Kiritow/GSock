@@ -19,6 +19,7 @@ enum
 	GSOCK_INVALID_IP = -4, // Invalid IP Address (IPv4,IPv6)
 	GSOCK_UNKNOWN_PROTOCOL = -5, // Unknown Protocol
 	GSOCK_ERROR_NTOP = -6, // inet_ntop failed.
+    GSOCK_MISMATCH_PROTOCOL = -7, // Protocol mismatch.
 };
 
 class vsock
