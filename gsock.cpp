@@ -75,6 +75,19 @@ public:
     }
 } _init_winsock2_2_obj;
 
+static inline const char* get_family_name(int family)
+{
+	switch (family)
+	{
+	case AF_INET:
+		return "AF_INET";
+	case AF_INET6:
+		return "AF_INET6";
+	default:
+		return "Unknown";
+	}
+}
+
 struct vsock::_impl
 {
 	int sfd;
@@ -276,23 +289,30 @@ int sock::setrecvtime(int Second)
 //forgive me, but writing code in hospital is really not a good experience.
 using _sock_getname_callback_t = decltype(getsockname);
 
+union _sock_getname_pack
+{
+	sockaddr saddr;
+	sockaddr_in saddr4;
+	sockaddr_in6 saddr6;
+};
+
 static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_callback_t fn)
 {
-	struct sockaddr saddr;
-	socklen_t saddrlen=sizeof(saddr);
-	memset(&saddr,0,saddrlen);
-	int ret=fn(sfd,&saddr,&saddrlen);
+	_sock_getname_pack pack;
+	socklen_t saddrlen=sizeof(pack);
+	memset(&pack,0,saddrlen);
+	int ret=fn(sfd,&pack.saddr,&saddrlen);
 	if(ret<0) return ret; //don't bother errno. stop here.
-	if (saddr.sa_family == AF_INET)
+	if (pack.saddr.sa_family == AF_INET)
 	{
-		struct sockaddr_in* paddr = (sockaddr_in*)&saddr;
+		struct sockaddr_in* paddr = &pack.saddr4;
 		char ip_buff[64] = { 0 };
 		const char* pret = inet_ntop(AF_INET, paddr, ip_buff, 64);
 		if (pret)
 		{
 			ip = std::string(ip_buff);
 			port = ntohs(paddr->sin_port);
-			return GSOCK_OK;
+			return 0;
 		}
 		else
 		{
@@ -300,16 +320,16 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 			return GSOCK_ERROR_NTOP;
 		}
 	}
-	else if (saddr.sa_family == AF_INET6)
+	else if (pack.saddr.sa_family == AF_INET6)
 	{
-		struct sockaddr_in6* paddr = (sockaddr_in6*)&saddr;
+		struct sockaddr_in6* paddr = &pack.saddr6;
 		char ip_buff[128] = { 0 };
 		const char* pret = inet_ntop(AF_INET6, paddr, ip_buff, 128);
 		if (pret)
 		{
 			ip = std::string(ip_buff);
 			port = ntohs(paddr->sin6_port);
-			return GSOCK_OK;
+			return 1;
 		}
 		else
 		{
@@ -520,19 +540,6 @@ struct udpsock::_impl
 		}
 	}
 };
-
-static inline const char* get_family_name(int family)
-{
-	switch (family)
-	{
-	case AF_INET:
-		return "AF_INET";
-	case AF_INET6:
-		return "AF_INET6";
-	default:
-		return "Unknown";
-	}
-}
 
 udpsock::udpsock(int use_family) : _pp(new _impl)
 {
