@@ -13,8 +13,10 @@
 #pragma message("GSock Debug mode compiled in")
 #include <cstdio>
 #define myliblog(fmt,...) printf("<GSock|%s> " fmt,__func__,__VA_ARGS__)
+#define myliblog_ex(cond,fmt,...) do{if(cond){myliblog(fmt,__VA_ARGS__);}}while(0)
 #else
 #define myliblog(fmt,...)
+#define myliblog_ex(cond,fmt,...)
 #endif
 
 #ifdef _WIN32
@@ -119,7 +121,7 @@ vsock::~vsock()
 	{
 		if(_vp->created)
 		{
-			myliblog("Socket closed: [%d] in %p\n",_vp->sfd,this);
+			myliblog("Socket closed: [%d] with _vp %p\n",_vp->sfd,_vp);
 			closesocket(_vp->sfd);
 			
 			_vp->created=false;
@@ -380,7 +382,7 @@ public:
 			myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
 			return GSOCK_ERROR_CREAT;
 		}
-		myliblog("Socket created: [%d] with _vp %p\n", _vp->sfd, _vp);
+        myliblog("Socket <%s> created: [%d] with _vp %p\n", protocol == AF_INET ? "IPv4" : "IPv6", _vp->sfd, _vp);
 		_vp->created = true;
 		return GSOCK_OK;
 	}
@@ -518,7 +520,7 @@ int serversock::accept(sock& _out_s)
         s._vp->sfd=ret;
         s._vp->created=true;
 
-        myliblog("Socket opened: [%d] in %p by serversock _vp: %p\n",s._vp->sfd,&s,_vp);
+        myliblog("Socket opened: [%d] as sock::_vp %p by serversock::_vp: %p\n",s._vp->sfd,s._vp,_vp);
 
         /// Move resource.
         _out_s=std::move(s);
@@ -551,6 +553,7 @@ struct udpsock::_impl
 				return GSOCK_ERROR_CREAT;
 			}
 			_vp->created = true;
+            myliblog("Socket <%s> created: [%d] with _vp %p\n", protocol == AF_INET ? "IPv4" : "IPv6", _vp->sfd, _vp);
 			return GSOCK_OK;
 		}
 	}
@@ -584,6 +587,7 @@ struct udpsock::_impl
             is_protocol_decided = true;
             myliblog("Protocol decided to %s in udpsock with _vp %p \n", get_family_name(protocol), _vp);
         }
+
         return ret;
     }
 
@@ -1130,5 +1134,5 @@ int DNSResolve(const std::string& HostName, std::string& _out_IPStr)
 
 
 /// Undefine marcos
+#undef myliblog_ex
 #undef myliblog
-
