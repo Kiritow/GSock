@@ -600,7 +600,7 @@ static int convert_ipv46(const std::string& IPStr, int Port,
 		paddr6->sin6_port = htons(Port);
 		paddr6->sin6_family = AF_INET6;
 
-		_out_psockaddr = (sockaddr*)&paddr6;
+		_out_psockaddr = (sockaddr*)paddr6;
 		_out_szsockaddr = sizeof(sockaddr_in6);
 		return 1;
 	}
@@ -615,7 +615,7 @@ static int convert_ipv46(const std::string& IPStr, int Port,
 		paddr->sin_port = htons(Port);
 		paddr->sin_family = AF_INET;
 
-		_out_psockaddr = (sockaddr*)&paddr;
+		_out_psockaddr = (sockaddr*)paddr;
 		_out_szsockaddr = sizeof(sockaddr_in);
 		return 0;
 	}
