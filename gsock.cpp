@@ -406,6 +406,15 @@ serversock::serversock(int use_family) :_pp(new _impl)
 	}
 }
 
+serversock::~serversock()
+{
+    if (_pp)
+    {
+        delete _pp;
+        _pp = nullptr;
+    }
+}
+
 int serversock::bind(int Port)
 {
     myliblog("serversock::bind() %p\n",this);
@@ -546,6 +555,12 @@ struct udpsock::_impl
 		}
 	}
 
+    // Decide the protocol
+    // Return:
+    // GSOCK_OK
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
     int try_decide(vsock::_impl* _vp, int in_protocol)
     {
         if (is_protocol_decided)
@@ -719,7 +734,7 @@ int udpsock::broadcast_at(int Port)
 		else
 		{
 			myliblog("IPv6 does not support broadcast!\n");
-			return -1;
+            return GSOCK_BAD_PROTOCOL;
 		}
 	}
 	else
@@ -829,7 +844,7 @@ int udpsock::broadcast(int Port,const void* buffer,int length)
 		else
 		{
 			myliblog("IPv6 does not support broadcast!\n");
-			return -1;
+            return GSOCK_BAD_PROTOCOL;
 		}
 	}
 	else
@@ -1054,7 +1069,7 @@ int DNSResolve(const std::string& HostName, std::vector<std::string>& _out_IPStr
 	int ret = getaddrinfo(HostName.c_str(), NULL, &hints, &result);
 	if (ret != 0)
 	{
-		return -1;/// API Call Failed.
+		return GSOCK_API_ERROR;/// API Call Failed.
 	}
 
 	int cnt = 0;

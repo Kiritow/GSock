@@ -20,6 +20,7 @@ enum
 	GSOCK_UNKNOWN_PROTOCOL = -5, // Unknown Protocol
 	GSOCK_ERROR_NTOP = -6, // inet_ntop failed.
     GSOCK_MISMATCH_PROTOCOL = -7, // Protocol mismatch.
+    GSOCK_BAD_PROTOCOL = -8, // Bad protocol. 
 };
 
 class vsock
@@ -43,32 +44,34 @@ protected:
 class sock : public vsock
 {
 public:
-    /// Return:
-    /// 0: Connection Established. No Error.
-    /// -1: connect() call error. See errno.
-    /// -2: This socket has been connected before.
-    /// -3: socket() call error. Failed to create socket. See errno.
-	/// -4: IP Address invalid.
+    // Return:
+    // GSOCK_OK: Connection Established. No Error.
+    // GSOCK_API_ERROR: connect() call error. See errno.
+    // GSOCK_INVALID_SOCKET: This socket has been connected before.
+    // GSOCK_ERROR_CREAT
+	// GSOCK_INVALID_IP
     int connect(const std::string& IPStr,int Port);
 
-    /// Return:
-    /// return what send() and recv() call returns.
+    // Return:
+    // return what send() and recv() call returns.
     int send(const void* Buffer,int Length);
 	int recv(void* Buffer, int MaxToRecv);
 
+    // Return:
+    // GSOCK_OK
+    // GSOCK_API_ERROR
     int getsendtime(int& _out_Second,int& _out_uSecond);
     int getrecvtime(int& _out_Second,int& _out_uSecond);
-
     int setsendtime(int Second);
     int setrecvtime(int Second);
     
-    /// Return:
-	/// 0: Success. No Error. IPv4
-	/// 1: Success. No Error. IPv6
-    /// -1: getlocalname() or getpeername() call error. See errno.
-    /// -2: Socket not created.
+    // Return:
+	// 0: Success. No Error. IPv4
+	// 1: Success. No Error. IPv6
+    // GSOCK_API_ERROR: getlocalname() or getpeername() call error. See errno.
+    // GSOCK_INVALID_SOCKET: Socket not created.
+    int getpeer(std::string& IPStr, int& Port);
     int getlocal(std::string& IPStr,int& Port);
-    int getpeer(std::string& IPStr,int& Port);
     
     friend class serversock;
 private:
@@ -85,23 +88,29 @@ public:
 	serversock(int use_family=0);
 	~serversock();
 
-    /// Return:
-    /// 0: Bind Succeed. No Error.
-    /// -1: bind() call error. See errno.
-    /// -2: This socket has been created before.
-    /// -3: socket() call error. Failed to create socket. See errno.
+    // Return:
+    // GSOCK_OK: Bind Succeed. No Error.
+    // GSOCK_API_ERROR: bind() call error. See errno.
+    // GSOCK_INVALID_SOCKET: This socket has been created before.
+    // GSOCK_ERROR_CREAT
     int bind(int Port);
 
+    // Return:
+    // GSOCK_OK
+    // GSOCK_ERROR_CREAT
+    // GSOCK_API_ERROR: setsockopt() call error.
     int set_reuse();
 
-    /// Return:
-    /// return what listen() call returns
+    // Return:
+    // GSOCK_OK
+    // GSOCK_API_ERROR: listen() call error.
+    // GSOCK_INVALID_SOCKET
     int listen(int MaxCount);
 
-    /// Return:
-    /// 0: Accept Succeed. No Error. _out_s holds the new socket.
-    /// -1: accept() call error. See errno.
-    /// -2: _out_s is a connected socket, which should not be passed in.
+    // Return:
+    // GSOCK_OK: Accept Succeed. No Error. _out_s holds the new socket.
+    // GSOCK_API_ERROR: accept() call error. See errno.
+    // GSOCK_INVALID_SOCKET: _out_s is not an empty socket, which should not be passed in.
     int accept(sock& _out_s);
 private:
 	struct _impl;
@@ -118,26 +127,66 @@ public:
  	udpsock(int use_family=0);
 	~udpsock();
 	
-	/// Use udp socket as tcp socket. (but of course it is not).
-	/// connect call just copy the target socket data to kernel. See connect() for more info.
-	/// Return:
-	/// -1: connect() error.
-	/// -4: IP Address Invalid.
+	// Use udp socket as tcp socket. (but of course it is not).
+	// connect call just copy the target socket data to kernel. See connect() for more info.
+	// Return:
+    // GSOCK_OK: data copied.
+    // GSOCK_API_ERROR: connect() call error.
+    // GSOCK_INVALID_IP
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
 	int connect(const std::string& IPStr,int Port);
+    // Return:
+    // Besides all returns of connect(...), adding the following:
+    // GSOCK_BAD_PROTOCOL: broadcast is not supported.
 	int broadcast_at(int Port);
 	
-	/// Must be called in broadcast mode.
+	// Must be called in broadcast mode before any broadcasting.
+    // Return:
+    // GSOCK_OK
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
 	int set_broadcast();
 
-	/// Explict bind() call is only need when you have to receive data.
+	// Explict bind() call is only need when you have to receive data.
+    // Return:
+    // GSOCK_OK
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
 	int bind(int Port);
 
+    // Return:
+    // ret>=0: sendto() returns
+    // GSOCK_API_ERROR(-1): sendto() call error.
+    // GSOCK_INVALID_IP
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
 	int sendto(const std::string& IPStr, int Port, const void* buffer, int length);
-	int broadcast(int Port,const void* buffer,int length);
-	/// Must call bind() before calling recvfrom().
+	// Return:
+    // Besides all returns of sendto(...), adding the following:
+    // GSOCK_BAD_PROTOCOL: broadcast is not supported.
+    int broadcast(int Port,const void* buffer,int length);
+
+	// Must call bind() before calling recvfrom().
+    // Return:
+    // ret>=0: recvfrom() returns
+    // GSOCK_API_ERROR(-1): recvfrom() call error.
+    // GSOCK_ERROR_NTOP
+    // GSOCK_UNKNOWN_PROTOCOL
+    // GSOCK_MISMATCH_PROTOCOL
+    // GSOCK_INVALID_SOCKET
+    // GSOCK_ERROR_CREAT
 	int recvfrom(std::string& fromIP, int& fromPort, void* buffer, int bufferLength);
 	
-    /// send() and recv() should only be called after connect(). Or it will fail.
+    // send() and recv() should only be called after connect(). Or it will fail.
+    // Return:
+    // ret>=0: send(), recv() returns.
+    // GSOCK_API_ERROR(-1): send(), recv() call error.
+    // GSOCK_INVALID_SOCKET: socket not created, and connect() has not been called yet.
 	int send(const void* buffer,int length);
 	int recv(void* buffer,int bufferLength);
 private:
@@ -171,16 +220,18 @@ private:
 };
 
 /// Net Tools
+
 // Return:
+// >=0: Number of fetched results from getaddrinfo() call.
 // -1: getaddrinfo() call failed.
-// Other: Number of fetched results from getaddrinfo() call.
 int DNSResolve(const std::string& HostName, std::vector<std::string>& _out_IPStrVec);
 
-// A wrapper of DNSResolve(...,std::vector<std::string>&)
+// A wrapper of the vector version of DNSResolve. 
+// _out_IPStr will be assigned with the first result in vector.
 // Return:
+// 0: Success.
 // -1: getaddrinfo() call failed.
 // -2: Failed to resolve. (No results in vector)
-// 0: Success.
 int DNSResolve(const std::string& HostName,std::string& _out_IPStr);
 
 #endif // _gsock_h
