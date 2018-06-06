@@ -12,8 +12,8 @@
 #ifdef GSOCK_DEBUG
 #pragma message("GSock Debug mode compiled in")
 #include <cstdio>
-#define myliblog(fmt,...) printf("<GSock|%s> " fmt,__func__,__VA_ARGS__)
-#define myliblog_ex(cond,fmt,...) do{if(cond){myliblog(fmt,__VA_ARGS__);}}while(0)
+#define myliblog(fmt,...) printf("<GSock|%s> " fmt,__func__,##__VA_ARGS__)
+#define myliblog_ex(cond,fmt,...) do{if(cond){myliblog(fmt,##__VA_ARGS__);}}while(0)
 #else
 #define myliblog(fmt,...)
 #define myliblog_ex(cond,fmt,...)
@@ -38,6 +38,7 @@
 #include <fcntl.h>
 #define closesocket close
 using BYTE = unsigned char;
+#define WSAGetLastError() errno
 #endif
 
 #include <cstring> /// memset
@@ -678,7 +679,7 @@ static int convertback_ipv46(const sockaddr* paddr, std::string& _out_IPStr)
 	char buff[128] = { 0 };
 	if (paddr->sa_family == AF_INET)
 	{
-		if (inet_ntop(AF_INET, paddr, buff, 128)!=NULL)
+		if (inet_ntop(AF_INET, &(((const sockaddr_in*)paddr)->sin_addr), buff, 128)!=NULL)
 		{
 			_out_IPStr = std::move(std::string(buff));
 			return 0;
@@ -687,7 +688,7 @@ static int convertback_ipv46(const sockaddr* paddr, std::string& _out_IPStr)
 	}
 	else if (paddr->sa_family == AF_INET6)
 	{
-		if (inet_ntop(AF_INET6, paddr, buff, 128) != NULL)
+		if (inet_ntop(AF_INET6, &(((const sockaddr_in6*)paddr)->sin6_addr), buff, 128) != NULL)
 		{
 			_out_IPStr = std::move(std::string(buff));
 			return 1;
