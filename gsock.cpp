@@ -310,7 +310,7 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 	{
 		struct sockaddr_in* paddr = &pack.saddr4;
 		char ip_buff[64] = { 0 };
-		const char* pret = inet_ntop(AF_INET, paddr, ip_buff, 64);
+		const char* pret = inet_ntop(AF_INET, &(paddr->sin_addr), ip_buff, 64);
 		if (pret)
 		{
 			ip = std::string(ip_buff);
@@ -327,7 +327,7 @@ static int _sock_getname_call(int sfd,std::string& ip,int& port,_sock_getname_ca
 	{
 		struct sockaddr_in6* paddr = &pack.saddr6;
 		char ip_buff[128] = { 0 };
-		const char* pret = inet_ntop(AF_INET6, paddr, ip_buff, 128);
+		const char* pret = inet_ntop(AF_INET6, &(paddr->sin6_addr), ip_buff, 128);
 		if (pret)
 		{
 			ip = std::string(ip_buff);
