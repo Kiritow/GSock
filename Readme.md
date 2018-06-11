@@ -7,6 +7,7 @@ Licensed under MIT
 # Example
 
 ## TCP Client Example
+
 ```cpp
 #include "GSock/gsock.h"
 #include "GSock/gsock_helper.h"
@@ -43,6 +44,51 @@ int main()
         int ret = s.recv(buff, 1024);
         if (ret <= 0) break;
         printf("%s", buff);
+    }
+
+    return 0;
+}
+```
+
+## TCP Echo Server Example
+
+```cpp
+#include "GSock/gsock.h"
+#include "GSock/gsock_helper.h"
+
+void service_main(sock& s)
+{
+    char buff[1024];
+    sock_helper sh(s);
+
+    while (true)
+    {
+        memset(buff, 0, 1024);
+        int ret = s.recv(buff, 1024);
+        if (ret <= 0) break;
+        sh.sendall(buff, ret);
+    }
+}
+
+int main()
+{
+    serversock t;
+    if (t.bind(59123) < 0 || t.listen(10) < 0)
+    {
+        printf("Failed to start up server.\n");
+        return 1;
+    }
+    
+    while (true)
+    {
+        sock s;
+        if (t.accept(s) < 0)
+        {
+            printf("Failed to accept.\n");
+            break;
+        }
+
+        service_main(s);
     }
 
     return 0;
