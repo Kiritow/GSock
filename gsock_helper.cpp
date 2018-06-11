@@ -55,6 +55,29 @@ int sock_helper::sendall(const void* ptr, int datasz)
     return sendall(ptr, datasz, x);
 }
 
+int sock_helper::recvall(void* ptr, int length_to_recv)
+{
+    int x;
+    return recvall(ptr, length_to_recv, x);
+}
+
+int sock_helper::recvall(void* ptr, int length_to_recv, int& bytes_recv)
+{
+    int done = 0;
+    while (done < length_to_recv)
+    {
+        int ret = _s.recv(((char*)ptr) + done, length_to_recv - done);
+        if (ret <= 0)
+        {
+            bytes_recv = done;
+            return ret;
+        }
+        done += ret;
+    }
+    bytes_recv = done;
+    return done;
+}
+
 int sock_helper::recvuntil(void* buff, int max_length, 
     const std::function<bool()>& cond_fn, int& bytes_recv)
 {
@@ -180,4 +203,4 @@ int sock_helper::recvline(std::string& out_data, const std::string& separator, b
         }
     }
     return done;
-}
+} 

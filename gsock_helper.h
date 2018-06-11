@@ -18,6 +18,9 @@ public:
     int sendall(const void* ptr, int datasz);
     int sendall(const void* ptr, int datasz, int& bytes_sent);
     
+    int recvall(void* ptr, int length_to_recv);
+    int recvall(void* ptr, int length_to_recv, int& bytes_recv);
+
     int recvuntil(void* buff, int max_length, const std::function<bool()>& cond_fn);
     int recvuntil(void* buff, int max_length, const std::function<bool()>& cond_fn, int& bytes_recv);
     int recvuntil(void* buff, int max_length, const std::function<bool(void*, int)>& cond_fn);
