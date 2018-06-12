@@ -22,9 +22,11 @@
 #ifdef _WIN32
 /// Using Win8.1
 #define _WIN32_WINNT 0x0603
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#ifdef _MSC_VER
+#pragma comment(lib,"ws2_32.lib")
+#endif
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -225,68 +227,74 @@ int sock::recv(void* Buffer,int MaxToRecv)
 
 int sock::getsendtime(int& _out_Second, int& _out_uSecond)
 {
-    struct timeval outtime;
-    socklen_t _not_used_t;
-    int ret=getsockopt(_vp->sfd,SOL_SOCKET,SO_SNDTIMEO,(char*)&outtime,&_not_used_t);
-    if(ret<0) return ret;
-    /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
-    _out_Second=outtime.tv_sec/1000;
-    _out_uSecond=outtime.tv_usec;
+    int result;
+    socklen_t _not_used_t = sizeof(result);
+    int ret = getsockopt(_vp->sfd, SOL_SOCKET, SO_SNDTIMEO, (char*)&result, &_not_used_t);
+    if (ret<0) return ret;
+    _out_Second = result / 1000;
+    _out_uSecond = result % 1000;
 #else
-    _out_Second=outtime.tv_sec;
-    _out_uSecond=outtime.tv_usec;
+    struct timeval outtime;
+    socklen_t _not_used_t = sizeof(outtime);
+    int ret = getsockopt(_vp->sfd, SOL_SOCKET, SO_SNDTIMEO, (char*)&outtime, &_not_used_t);
+    if (ret<0) return ret;
+    _out_Second = outtime.tv_sec;
+    _out_uSecond = outtime.tv_usec;
 #endif
-
     return ret;
 }
 
 int sock::getrecvtime(int& _out_Second, int& _out_uSecond)
 {
-    struct timeval outtime;
-    socklen_t _not_used_t;
-    int ret=getsockopt(_vp->sfd,SOL_SOCKET,SO_RCVTIMEO,(char*)&outtime,&_not_used_t);
-    if(ret<0) return ret;
-    /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
-    _out_Second=outtime.tv_sec/1000;
-    _out_uSecond=outtime.tv_usec;
+    int result;
+    socklen_t _not_used_t = sizeof(result);
+    int ret = getsockopt(_vp->sfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&result, &_not_used_t);
+    if (ret<0) return ret;
+    _out_Second=result/1000;
+    _out_uSecond = result % 1000;
 #else
+    struct timeval outtime;
+    socklen_t _not_used_t = sizeof(outtime);
+    int ret = getsockopt(_vp->sfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&outtime, &_not_used_t);
+    if (ret<0) return ret;
     _out_Second=outtime.tv_sec;
     _out_uSecond=outtime.tv_usec;
 #endif
-
     return ret;
 }
 
-int sock::setsendtime(int Second)
+int sock::setsendtime(int Second, int Millisecond)
 {
-    struct timeval outtime;
-    /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
-    outtime.tv_sec=Second*1000;
-    outtime.tv_usec=0;
+    int outtime = Second * 1000 + Millisecond % 1000;
 #else
-    outtime.tv_sec=Second;
-    outtime.tv_usec=0;
+    struct timeval outtime;
+    outtime.tv_sec = Second;
+    outtime.tv_usec = Millisecond;
 #endif
 
     return setsockopt(_vp->sfd,SOL_SOCKET,SO_SNDTIMEO,(const char*)&outtime,sizeof(outtime));
 }
 
-int sock::setrecvtime(int Second)
+int sock::setrecvtime(int Second, int Millisecond)
 {
-    struct timeval outtime;
-    /// We don't know why, but on Windows, 1 Second means 1000.
 #ifdef _WIN32
-    outtime.tv_sec=Second*1000;
-    outtime.tv_usec=0;
+    int outtime = Second * 1000 + Millisecond % 1000;
 #else
-    outtime.tv_sec=Second;
-    outtime.tv_usec=0;
+    struct timeval outtime;
+    outtime.tv_sec = Second;
+    outtime.tv_usec = Millisecond;
 #endif
 
     return setsockopt(_vp->sfd,SOL_SOCKET,SO_RCVTIMEO,(const char*)&outtime,sizeof(outtime));
+}
+
+int sock::setkeepalive(bool op)
+{
+    int option = op ? 1 : 0;
+    return setsockopt(_vp->sfd, SOL_SOCKET, SO_KEEPALIVE, (const char*)&option, sizeof(option));
 }
 
 //forgive me, but writing code in hospital is really not a good experience.

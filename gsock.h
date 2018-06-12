@@ -62,8 +62,9 @@ public:
     // GSOCK_API_ERROR
     int getsendtime(int& _out_Second,int& _out_uSecond);
     int getrecvtime(int& _out_Second,int& _out_uSecond);
-    int setsendtime(int Second);
-    int setrecvtime(int Second);
+    int setsendtime(int Second,int Millisecond);
+    int setrecvtime(int Second,int Millisecond);
+    int setkeepalive(bool op);
     
     // Return:
 	// 0: Success. No Error. IPv4
