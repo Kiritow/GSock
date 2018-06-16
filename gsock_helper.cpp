@@ -184,12 +184,23 @@ int sock_helper::recvpack(std::string& out_data)
     return done;
 }
 
+int sock_helper::sendline(const std::string& data, const std::string& separator)
+{
+    int ret = sendall(data.c_str(), data.size());
+    if (ret <= 0) return ret;
+    int xret = sendall(separator.c_str(), separator.size());
+    if (xret < 0) return xret;
+    return ret + xret;
+}
+
 int sock_helper::recvline(std::string& out_data, const std::string& separator, bool keep_sep)
 {
     out_data.clear();
 
     char c;
     int done = 0;
+    const int spsz = separator.size();
+
     while (true)
     {
         int ret = _s.recv(&c, 1);
@@ -199,10 +210,19 @@ int sock_helper::recvline(std::string& out_data, const std::string& separator, b
         }
         out_data.push_back(c);
         done += ret;
-        if (out_data.find(separator) != std::string::npos)
+        if (strcmp(out_data.c_str() + out_data.size() - spsz, separator.c_str()) == 0)
         {
             break;
         }
     }
+
+    if (!keep_sep)
+    {
+        for (int i = 0; i < spsz; i++)
+        {
+            out_data.pop_back();
+        }
+    }
+
     return done;
 } 

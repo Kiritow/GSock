@@ -30,6 +30,7 @@ public:
     int sendpack(const std::string& data);
     int recvpack(std::string& out_data);
 
+    int sendline(const std::string& data, const std::string& seperator="\r\n");
     int recvline(std::string& out_data, const std::string& separator="\r\n", bool keep_sep = false);
 private:
     sock & _s;
