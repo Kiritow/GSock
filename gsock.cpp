@@ -1080,14 +1080,17 @@ epoll::~epoll()
 }
 int epoll::add(const vsock& v,epoll_event* event)
 {
+	event->data.fd=_vp->sfd;
 	return epoll_ctl(_fd,EPOLL_CTL_ADD,v._vp->sfd,event);
 }
 int epoll::mod(const vsock& v,epoll_event* event)
 {
+	event->data.fd=_vp->sfd;
 	return epoll_ctl(_fd,EPOLL_CTL_MOD,v._vp->sfd,event);
 }
 int epoll::del(const vsock& v,epoll_event* event)
 {
+	event->data.fd=_vp->sfd;
 	return epoll_ctl(_fd,EPOLL_CTL_DEL,v._vp->sfd,event);
 }
 int epoll::wait(epoll_event* events,int maxsize,int timeout)
