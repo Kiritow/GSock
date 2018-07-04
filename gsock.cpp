@@ -38,6 +38,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/epoll.h>
 #define closesocket close
 using BYTE = unsigned char;
 #define WSAGetLastError() errno
@@ -1065,6 +1066,35 @@ bool selector::is_error(const vsock& v)
 {
 	return FD_ISSET(v._vp->sfd, &_pp->errorset);
 }
+
+#ifdef WIN32 // Windows: IOCP. Coming soon...
+
+#else // Linux: epoll
+epoll::epoll()
+{
+	_fd=epoll_create(1024); // this parameter is useless.
+}
+epoll::~epoll()
+{
+	close(_fd);
+}
+int epoll::add(const vsock& v,epoll_event* event)
+{
+	return epoll_ctl(_fd,EPOLL_CTL_ADD,v._vp->sfd,event);
+}
+int epoll::mod(const vsock& v,epoll_event* event)
+{
+	return epoll_ctl(_fd,EPOLL_CTL_MOD,v._vp->sfd,event);
+}
+int epoll::del(const vsock& v,epoll_event* event)
+{
+	return epoll_ctl(_fd,EPOLL_CTL_DEL,v._vp->sfd,event);
+}
+int epoll::wait(epoll_event* events,int maxsize,int timeout)
+{
+	return epoll_wait(_fd,events,maxsize,timeout);
+}
+#endif
 
 int DNSResolve(const std::string& HostName, std::vector<std::string>& _out_IPStrVec)
 {

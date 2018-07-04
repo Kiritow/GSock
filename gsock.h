@@ -39,6 +39,11 @@ protected:
 	_impl* _vp;
 
 	friend class selector;
+#ifdef WIN32
+
+#else
+    friend class epoll;
+#endif
 };
 
 class sock : public vsock
@@ -219,6 +224,29 @@ private:
 	struct _impl;
 	_impl* _pp;
 };
+
+#ifdef WIN32 // Windows: IOCP. Coming soon...
+
+#else // Linux: epoll
+class epoll
+{
+public:
+    epoll();
+    int add(const vsock& v,epoll_event* event);
+    int mod(const vsock& v,epoll_event* event);
+    int del(const vsock& v,epoll_event* event);
+
+    // >0: event counts.
+    // =0: Time up.
+    // <0: Error.
+    // Set timeout to -1 for infinity waiting.
+    int wait(epoll_event* events,int maxsize,int timeout);
+
+    ~epoll();
+private:
+    int _fd;
+};
+#endif // End of Platform specific
 
 /// Net Tools
 
