@@ -243,7 +243,7 @@ public:
     // <0: Error.
     // Set timeout to -1 for infinity waiting.
     // Get data from events[i].events and events[i].data.fd
-    int wait(epoll_event* events,int maxsize,int timeout);
+    int wait(struct epoll_event* events,int maxsize,int timeout);
 
     ~epoll();
 private:

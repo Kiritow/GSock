@@ -4,6 +4,7 @@
 */
 
 #include "gsock_helper.h"
+#include <cstring>
 
 #ifdef _WIN32
 /// Using Win8.1
