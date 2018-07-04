@@ -228,6 +228,7 @@ private:
 #ifdef WIN32 // Windows: IOCP. Coming soon...
 
 #else // Linux: epoll
+#include <sys/epoll.h>
 class epoll
 {
 public:
