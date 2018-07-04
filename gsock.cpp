@@ -1078,20 +1078,26 @@ epoll::~epoll()
 {
 	close(_fd);
 }
-int epoll::add(const vsock& v,epoll_event* event)
+int epoll::add(const vsock& v,int event)
 {
-	event->data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_ADD,v._vp->sfd,event);
+	struct epoll_event ev;
+	ev.events=event;
+	ev.data.fd=v._vp->sfd;
+	return epoll_ctl(_fd,EPOLL_CTL_ADD,v._vp->sfd,&ev);
 }
-int epoll::mod(const vsock& v,epoll_event* event)
+int epoll::mod(const vsock& v,int event)
 {
-	event->data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_MOD,v._vp->sfd,event);
+	struct epoll_event ev;
+	ev.events=event;
+	ev.data.fd=v._vp->sfd;
+	return epoll_ctl(_fd,EPOLL_CTL_MOD,v._vp->sfd,&ev);
 }
-int epoll::del(const vsock& v,epoll_event* event)
+int epoll::del(const vsock& v,int event)
 {
-	event->data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_DEL,v._vp->sfd,event);
+	struct epoll_event ev;
+	ev.events=event;
+	ev.data.fd=v._vp->sfd;
+	return epoll_ctl(_fd,EPOLL_CTL_DEL,v._vp->sfd,&ev);
 }
 int epoll::wait(epoll_event* events,int maxsize,int timeout)
 {

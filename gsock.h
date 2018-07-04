@@ -233,14 +233,16 @@ class epoll
 {
 public:
     epoll();
-    int add(const vsock& v,epoll_event* event);
-    int mod(const vsock& v,epoll_event* event);
-    int del(const vsock& v,epoll_event* event);
+    // EPOLLIN, EPOLLOUT, ...
+    int add(const vsock& v,int event);
+    int mod(const vsock& v,int event);
+    int del(const vsock& v,int event);
 
     // >0: event counts.
     // =0: Time up.
     // <0: Error.
     // Set timeout to -1 for infinity waiting.
+    // Get data from events[i].events and events[i].data.fd
     int wait(epoll_event* events,int maxsize,int timeout);
 
     ~epoll();
