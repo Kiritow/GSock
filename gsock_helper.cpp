@@ -58,6 +58,12 @@ int sock_helper::sendall(const void* ptr, int datasz)
     return sendall(ptr, datasz, x);
 }
 
+int sock_helper::sendall(const std::string& data)
+{
+	int x;
+	return sendall(data.data(), data.size(), x);
+}
+
 int sock_helper::recvall(void* ptr, int length_to_recv)
 {
     int x;

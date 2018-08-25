@@ -15,6 +15,7 @@ class sock_helper
 public:
     sock_helper(sock&);
     
+	int sendall(const std::string& data);
     int sendall(const void* ptr, int datasz);
     int sendall(const void* ptr, int datasz, int& bytes_sent);
     
