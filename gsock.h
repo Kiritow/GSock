@@ -229,24 +229,30 @@ private:
 
 #else // Linux: epoll
 #include <sys/epoll.h>
+#include <functional>
+
 class epoll
 {
 public:
-    epoll();
+    epoll(int MaxListen);
     // EPOLLIN, EPOLLOUT, ...
-    int add(const vsock& v,int event);
-    int mod(const vsock& v,int event);
-    int del(const vsock& v,int event);
+    int add(vsock& v,int event);
+    int mod(vsock& v,int event);
+    int del(vsock& v,int event);
 
-    // >0: event counts.
-    // =0: Time up.
+    // >0: Event counts.
+    // =0: Timeout.
     // <0: Error.
     // Set timeout to -1 for infinity waiting.
-    // Get data from events[i].events and events[i].data.fd
-    int wait(struct epoll_event* events,int maxsize,int timeout);
+    // Call handle() to handle events
+	int wait(int timeout);
+
+	void handle(const std::function<void(vsock&,int)>& callback);
 
     ~epoll();
 private:
+	std::vector<struct epoll_event> _evec;
+	int _n;
     int _fd;
 };
 #endif // End of Platform specific

@@ -1077,38 +1077,50 @@ bool selector::is_error(const vsock& v)
 #ifdef WIN32 // Windows: IOCP. Coming soon...
 
 #else // Linux: epoll
-epoll::epoll()
+#include <functional>
+
+epoll::epoll(int MaxListen) : _evec(MaxListen)
 {
-	_fd=epoll_create(1024); // this parameter is useless.
+	_fd = epoll_create(MaxListen); // this parameter is useless.
 }
 epoll::~epoll()
 {
 	close(_fd);
 }
-int epoll::add(const vsock& v,int event)
+int epoll::add(vsock& v, int event)
 {
 	struct epoll_event ev;
-	ev.events=event;
-	ev.data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_ADD,v._vp->sfd,&ev);
+	ev.events = event;
+	ev.data.ptr = &v;
+	return epoll_ctl(_fd, EPOLL_CTL_ADD, v._vp->sfd, &ev);
 }
-int epoll::mod(const vsock& v,int event)
+int epoll::mod(vsock& v, int event)
 {
 	struct epoll_event ev;
-	ev.events=event;
-	ev.data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_MOD,v._vp->sfd,&ev);
+	ev.events = event;
+	ev.data.ptr = &v;
+	return epoll_ctl(_fd, EPOLL_CTL_MOD, v._vp->sfd, &ev);
 }
-int epoll::del(const vsock& v,int event)
+int epoll::del(vsock& v, int event)
 {
 	struct epoll_event ev;
-	ev.events=event;
-	ev.data.fd=v._vp->sfd;
-	return epoll_ctl(_fd,EPOLL_CTL_DEL,v._vp->sfd,&ev);
+	ev.events = event;
+	ev.data.ptr = &v;
+	return epoll_ctl(_fd, EPOLL_CTL_DEL, v._vp->sfd, &ev);
 }
-int epoll::wait(epoll_event* events,int maxsize,int timeout)
+int epoll::wait(int timeout)
 {
-	return epoll_wait(_fd,events,maxsize,timeout);
+	return _n = epoll_wait(_fd, _evec.data(), _evec.size(), timeout);
+}
+void epoll::handle(const std::function<void(vsock&, int)>& callback)
+{
+	if (_n > 0)
+	{
+		for (int i = 0; i < _n; i++)
+		{
+			callback(*((vsock*)(_evec[i].data.ptr)), (int)(_evec[i].events));
+		}
+	}
 }
 #endif
 
