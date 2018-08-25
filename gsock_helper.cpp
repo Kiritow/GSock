@@ -157,7 +157,7 @@ int sock_helper::sendpack(const std::string& data)
 int sock_helper::recvpack(std::string& out_data)
 {
     long net_size;
-    int ret = recvuntil(&net_size, sizeof(long), []() {return false; });
+	int ret = recvall(&net_size, sizeof(net_size));
     if (ret <= 0)
     {
         return ret;
