@@ -7,8 +7,6 @@
 
 #include "gsock.h"
 
-#define GSOCK_DEBUG
-
 #ifdef GSOCK_DEBUG
 #pragma message("GSock Debug mode compiled in")
 #include <cstdio>
@@ -20,8 +18,17 @@
 #endif
 
 #ifdef _WIN32
-/// Using Win8.1
-#define _WIN32_WINNT 0x0603
+/* _WIN32_WINNT defines
+Windows XP = 0x0501
+Windows Server 2003 = 0x0502
+Windows Vista, Windows Server 2008 = 0x0600
+Windows 7 = 0x0601
+Windows 8 = 0x0602
+Windows 8.1 = 0x0603
+Windows 10 = 0x0A00
+*/
+// Using Win10 by default
+#define _WIN32_WINNT 0x0A00
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #ifdef _MSC_VER
