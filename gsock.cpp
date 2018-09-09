@@ -138,8 +138,7 @@ gerrno TranslateNativeErrToGErr(int native_errcode)
 	case WSAEINTR:
 		return gerrno::Interrupted;
 #else
-	case EAGAIN:
-	case EWOULDBLOCK:
+	case EWOULDBLOCK: // EAGAIN == EWOULDBLOCK
 		return gerrno::WouldBlock;
 	case EINPROGRESS:
 		return gerrno::InProgress;
@@ -165,6 +164,7 @@ struct vsock::_impl
 	// Does not set "nonblocking" flag.
 	int doSetNonblocking()
 	{
+#ifdef _WIN32
 		u_long mode = 1;
 		if (ioctlsocket(sfd, FIONBIO, &mode) == 0)
 		{
@@ -174,6 +174,13 @@ struct vsock::_impl
 		{
 			return -1;
 		}
+#else
+		int flag = fcntl(sfd, F_GETFL, 0);
+		if (flag < 0) return -1;
+		flag |= O_NONBLOCK;
+		if (fcntl(sfd, F_SETFL, flag) < 0) return -1;
+		return 0;
+#endif
 	}
 };
 
@@ -457,6 +464,8 @@ struct NBSendResult::_impl
 
 void NBSendResult::_impl::update()
 {
+	if (status > 1) return;
+
 	int ret = send(sfd, ptr + done, total - done, 0);
 	if (ret > 0)
 	{
@@ -547,6 +556,8 @@ struct NBRecvResult::_impl
 
 void NBRecvResult::_impl::update()
 {
+	if (status > 1) return;
+
 	int ret = recv(sfd, ptr + done, maxsz - done, 0);
 	if (ret > 0)
 	{
