@@ -28,6 +28,23 @@ enum
 	GSOCK_MISMATCH_MODE = -10, // Example: calling blocking method on a non-blocking socket. 
 };
 
+// Internal Socket Call Errcode
+enum gerrno
+{
+	UnknownError = -1,
+	OK = 0,
+	// Values of all known errors are positive number.
+	WouldBlock,
+	InProgress,
+	Already,
+	IsConnected,
+	Interrupted,
+};
+
+// For Debug purpose.
+int GetNativeErrCode();
+gerrno TranslateNativeErrToGErr(int native_errcode);
+
 class vsock
 {
 public:
@@ -78,13 +95,17 @@ public:
 
 	// Is the operation finished.
 	bool isFinished();
+
 	// Wait until all data is sent.
 	void wait();
+
 	// Is all data sent successfully.
 	bool isSuccess();
 	int getBytesDone();
 
-	int getErrCode();
+	// If connection is closed while sending data,
+	// the state changes to [Finished,Failed]. And errcode will be 0.
+	gerrno getErrCode();
 private:
 	struct _impl;
 	std::shared_ptr<_impl> _p;
@@ -104,7 +125,11 @@ public:
 	bool isSuccess();
 	int getBytesDone();
 
-	int getErrCode();
+	// If connection is closed while receiving data,
+	// the state changes to [Finished,Failed]. And errcode will be 0.
+	// If setStopAtEdge(true) is called and there's no more data while isFinished() is called,
+	// the state changes to [Finished,Failed]. And errcode will be gerrno::WouldBlock
+	gerrno getErrCode();
 private:
 	struct _impl;
 	std::shared_ptr<_impl> _p;

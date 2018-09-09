@@ -120,17 +120,7 @@ int GetNativeErrCode()
 #endif
 }
 
-// Internal Socket Call Errcode
-enum gerrno
-{
-	UnknownError = -1,
-	OK,
-	WouldBlock,
-	InProgress,
-	Already,
-	IsConnected,
-	Interrupted,
-};
+
 
 gerrno TranslateNativeErrToGErr(int native_errcode)
 {
@@ -460,7 +450,7 @@ struct NBSendResult::_impl
 	// 3: Error occurs.
 	int status;
 
-	int errcode;
+	gerrno errcode;
 
 	void update();
 };
@@ -483,7 +473,7 @@ void NBSendResult::_impl::update()
 	else if (ret == 0)
 	{
 		status = 3;
-		errcode = 0;
+		errcode = gerrno::OK;
 	}
 	else // ret == -1
 	{
@@ -529,7 +519,7 @@ int NBSendResult::getBytesDone()
 	return _p->done;
 }
 
-int NBSendResult::getErrCode()
+gerrno NBSendResult::getErrCode()
 {
 	return _p->errcode;
 }
@@ -550,7 +540,7 @@ struct NBRecvResult::_impl
 	// 3: Error occurs.
 	int status;
 
-	int errcode;
+	gerrno errcode;
 
 	void update();
 };
@@ -573,7 +563,7 @@ void NBRecvResult::_impl::update()
 	else if (ret == 0)
 	{
 		status = 3;
-		errcode = 0;
+		errcode = gerrno::OK;
 	}
 	else // ret == -1
 	{
@@ -631,11 +621,10 @@ int NBRecvResult::getBytesDone()
 	return _p->done;
 }
 
-int NBRecvResult::getErrCode()
+gerrno NBRecvResult::getErrCode()
 {
 	return _p->errcode;
 }
-
 
 NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
 {
