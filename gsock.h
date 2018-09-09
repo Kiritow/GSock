@@ -71,12 +71,37 @@ private:
 	friend class sock;
 };
 
-class NBTransferResult
+class NBSendResult
 {
 public:
-	NBTransferResult();
+	NBSendResult();
+
+	// Is the operation finished.
+	bool isFinished();
+	// Wait until all data is sent.
+	void wait();
+	// Is all data sent successfully.
+	bool isSuccess();
+	int getBytesDone();
+
+	int getErrCode();
+private:
+	struct _impl;
+	std::shared_ptr<_impl> _p;
+
+	friend class sock;
+};
+
+class NBRecvResult
+{
+public:
+	NBRecvResult();
+
+	void setStopAtEdge(bool flag);
 
 	bool isFinished();
+	void wait();
+	bool isSuccess();
 	int getBytesDone();
 
 	int getErrCode();
@@ -104,8 +129,8 @@ public:
     // return what send() and recv() call returns.
     int send(const void* Buffer,int Length);
 	int recv(void* Buffer, int MaxToRecv);
-	NBTransferResult send_nb(const void* Buffer, int Length);
-	NBTransferResult recv_nb(void* Buffer, int MaxToRecv);
+	NBSendResult send_nb(const void* Buffer, int Length);
+	NBRecvResult recv_nb(void* Buffer, int MaxToRecv);
 
     // Return:
     // GSOCK_OK

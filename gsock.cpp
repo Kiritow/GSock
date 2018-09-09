@@ -129,6 +129,7 @@ enum gerrno
 	InProgress,
 	Already,
 	IsConnected,
+	Interrupted,
 };
 
 gerrno TranslateNativeErrToGErr(int native_errcode)
@@ -144,7 +145,10 @@ gerrno TranslateNativeErrToGErr(int native_errcode)
 		return gerrno::Already;
 	case WSAEISCONN:
 		return gerrno::IsConnected;
+	case WSAEINTR:
+		return gerrno::Interrupted;
 #else
+	case EAGAIN:
 	case EWOULDBLOCK:
 		return gerrno::WouldBlock;
 	case EINPROGRESS:
@@ -153,6 +157,8 @@ gerrno TranslateNativeErrToGErr(int native_errcode)
 		return gerrno::Already;
 	case EISCONN:
 		return gerrno::IsConnected;
+	case EINTR:
+		return gerrno::Interrupted;
 #endif
 	default:
 		myliblog("Unknown Error Code: %d\n", native_errcode);
@@ -393,9 +399,11 @@ void NBConnectResult::_impl::update()
 	{
 		status = 2;
 	}
-	else
+	else // ret == -1
 	{
 		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
+		errcode = err;
+
 		if (err == gerrno::InProgress || err == gerrno::WouldBlock || err == gerrno::Already)
 		{
 			status = 1;
@@ -410,7 +418,7 @@ void NBConnectResult::_impl::update()
 		}
 	}
 
-	myliblog("Status updated to %d\n", status);
+	myliblog("NBConnectResult Status updated to %d\n", status);
 }
 
 NBConnectResult::NBConnectResult() : _p(new _impl)
@@ -426,7 +434,6 @@ bool NBConnectResult::isFinished()
 
 bool NBConnectResult::isConnected()
 {
-	_p->update();
 	return (_p->status == 2);
 }
 
@@ -440,19 +447,195 @@ void NBConnectResult::wait()
 	while (!isFinished());
 }
 
-struct NBTransferResult::_impl
+struct NBSendResult::_impl
 {
 	int sfd;
-	void* ptr;
-	int datasz;
+	const char* ptr;
+	int total;
+	int done;
+
+	// 0: Not started.
+	// 1: Data is being sent
+	// 2: Data sent without error.
+	// 3: Error occurs.
+	int status;
 
 	int errcode;
+
+	void update();
 };
 
-NBTransferResult::NBTransferResult() : _p(new _impl)
+void NBSendResult::_impl::update()
 {
+	int ret = send(sfd, ptr + done, total - done, 0);
+	if (ret > 0)
+	{
+		done += ret;
+		if (done == total)
+		{
+			status = 2;
+		}
+		else
+		{
+			status = 1;
+		}
+	}
+	else if (ret == 0)
+	{
+		status = 3;
+		errcode = 0;
+	}
+	else // ret == -1
+	{
+		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
+		errcode = err;
 
+		if (err == gerrno::WouldBlock)
+		{
+			status = 1;
+		}
+		else
+		{
+			status = 3;
+		}
+	}
+
+	myliblog("NBSendResult status updated to %d\n", status);
 }
+
+NBSendResult::NBSendResult() : _p(new _impl)
+{
+	_p->status = 0;
+}
+
+bool NBSendResult::isFinished()
+{
+	_p->update();
+	return (_p->status > 1);
+}
+
+void NBSendResult::wait()
+{
+	while (!isFinished());
+}
+
+bool NBSendResult::isSuccess()
+{
+	return (_p->status == 2);
+}
+
+int NBSendResult::getBytesDone()
+{
+	return _p->done;
+}
+
+int NBSendResult::getErrCode()
+{
+	return _p->errcode;
+}
+
+struct NBRecvResult::_impl
+{
+	int sfd;
+	char* ptr;
+	int maxsz;
+	int done;
+
+	// When work together with epoll at ET mode, setting this flag can avoid infinite EAGAIN recv loop.
+	bool stopAtEdge;
+
+	// 0: Not started.
+	// 1: Data is being sent
+	// 2: Data sent without error.
+	// 3: Error occurs.
+	int status;
+
+	int errcode;
+
+	void update();
+};
+
+void NBRecvResult::_impl::update()
+{
+	int ret = recv(sfd, ptr + done, maxsz - done, 0);
+	if (ret > 0)
+	{
+		done += ret;
+		if (done == maxsz)
+		{
+			status = 2;
+		}
+		else
+		{
+			status = 1;
+		}
+	}
+	else if (ret == 0)
+	{
+		status = 3;
+		errcode = 0;
+	}
+	else // ret == -1
+	{
+		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
+		errcode = err;
+
+		if (err == gerrno::WouldBlock)
+		{
+			if (stopAtEdge)
+			{
+				status = 2;
+			}
+			else
+			{
+				status = 1;
+			}
+		}
+		else
+		{
+			status = 3;
+		}
+	}
+
+	myliblog("NBRecvResult status updated to %d\n", status);
+}
+
+NBRecvResult::NBRecvResult() : _p(new _impl)
+{
+	_p->status = 0;
+}
+
+void NBRecvResult::setStopAtEdge(bool flag)
+{
+	_p->stopAtEdge = flag;
+}
+
+bool NBRecvResult::isFinished()
+{
+	_p->update();
+	return (_p->status > 1);
+}
+
+void NBRecvResult::wait()
+{
+	while (!isFinished());
+}
+
+bool NBRecvResult::isSuccess()
+{
+	return (_p->status == 2);
+}
+
+int NBRecvResult::getBytesDone()
+{
+	return _p->done;
+}
+
+int NBRecvResult::getErrCode()
+{
+	return _p->errcode;
+}
+
 
 NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
 {
@@ -521,6 +704,31 @@ int sock::send(const void* Buffer,int Length)
 int sock::recv(void* Buffer,int MaxToRecv)
 {
     return ::recv(_vp->sfd,(char*)Buffer,MaxToRecv,0);
+}
+
+NBSendResult sock::send_nb(const void* Buffer, int Length)
+{
+	NBSendResult res;
+	res._p->ptr = (const char*)Buffer;
+	res._p->total = Length;
+	res._p->done = 0;
+	res._p->sfd = _vp->sfd;
+	
+	res._p->update();
+	return res;
+}
+
+NBRecvResult sock::recv_nb(void* Buffer, int MaxToRecv)
+{
+	NBRecvResult res;
+	res._p->ptr = (char*)Buffer;
+	res._p->maxsz = MaxToRecv;
+	res._p->done = 0;
+	res._p->stopAtEdge = false;
+	res._p->sfd = _vp->sfd;
+
+	res._p->update();
+	return res;
 }
 
 int sock::getsendtime(int& _out_Second, int& _out_uSecond)
