@@ -29,11 +29,11 @@ enum
 };
 
 // Internal Socket Call Errcode
+// Values of all errors are positive number.
 enum gerrno
 {
-	UnknownError = -1,
 	OK = 0,
-	// Values of all known errors are positive number.
+	UnknownError,
 	WouldBlock,
 	InProgress,
 	Already,
@@ -78,9 +78,9 @@ public:
 	bool isFinished();
 	// Wait until the connection is finished. (via while loop)
 	void wait();
-	bool isConnected();
+	bool isSuccess();
 	// ErrCode is only usable when the connection is finished and failed.
-	int getErrCode();
+	gerrno getErrCode();
 private:
 	struct _impl;
 	std::shared_ptr<_impl> _p;
@@ -179,6 +179,24 @@ private:
 	struct _impl;
 };
 
+class NBAcceptResult
+{
+public:
+	NBAcceptResult();
+
+	bool isFinished();
+	bool isSuccess();
+
+	sock& get();
+
+	gerrno getErrCode();
+private:
+	struct _impl;
+	std::shared_ptr<_impl> _sp;
+
+	friend class serversock;
+};
+
 class serversock : public vsock
 {
 public:
@@ -189,6 +207,7 @@ public:
 	serversock(int use_family=0);
 	~serversock();
 
+	// Notice that bind() should be called before setNonblocking()
     // Return:
     // GSOCK_OK: Bind Succeed. No Error.
     // GSOCK_API_ERROR: bind() call error. See errno.
@@ -202,6 +221,7 @@ public:
     // GSOCK_API_ERROR: setsockopt() call error.
     int set_reuse();
 
+	// Notice that listen() should be called before setNonblocking()
     // Return:
     // GSOCK_OK
     // GSOCK_API_ERROR: listen() call error.
@@ -213,6 +233,8 @@ public:
     // GSOCK_API_ERROR: accept() call error. See errno.
     // GSOCK_INVALID_SOCKET: _out_s is not an empty socket, which should not be passed in.
     int accept(sock& _out_s);
+	// Notice that bind() and listen() should be called before setNonBlocking()
+	NBAcceptResult accept_nb(sock& _out_s);
 private:
 	struct _impl;
 	_impl* _pp;

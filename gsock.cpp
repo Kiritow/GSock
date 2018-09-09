@@ -372,7 +372,7 @@ struct NBConnectResult::_impl
 	// 3: finished, failed. 
 	int status;
 
-	int errcode;
+	gerrno errcode;
 
 	void update();
 };
@@ -429,12 +429,12 @@ bool NBConnectResult::isFinished()
 	return (_p->status > 1);
 }
 
-bool NBConnectResult::isConnected()
+bool NBConnectResult::isSuccess()
 {
 	return (_p->status == 2);
 }
 
-int NBConnectResult::getErrCode()
+gerrno NBConnectResult::getErrCode()
 {
 	return _p->errcode;
 }
@@ -650,7 +650,7 @@ NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
 		{
 			// Failed.
 			res._p->status = 3;
-			res._p->errcode = GSOCK_INVALID_IP;
+			res._p->errcode = (gerrno)GSOCK_INVALID_IP;
 			return res;
 		}
 		res._p->saddr6.sin6_port = htons(Port);
@@ -668,7 +668,7 @@ NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
 		{
 			// Failed.
 			res._p->status = 3;
-			res._p->errcode = GSOCK_INVALID_IP;
+			res._p->errcode = (gerrno)GSOCK_INVALID_IP;
 			return res;
 		}
 		res._p->saddr.sin_port = htons(Port);
@@ -687,11 +687,11 @@ NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
 	{
 		res._p->status = 1;
 	}
-	else
+	else // xret is a GSock error
 	{
 		// Failed
 		res._p->status = 3;
-		res._p->errcode = xret;
+		res._p->errcode = (gerrno)xret;
 	}
 	return res;
 }
@@ -1000,6 +1000,93 @@ int serversock::listen(int MaxCount)
     return ::listen(_vp->sfd,MaxCount);
 }
 
+struct NBAcceptResult::_impl
+{
+	int sfd;
+
+	// For client use
+	bool isv4;
+	sockaddr_in saddr;
+	sockaddr_in6 saddr6;
+	socklen_t saddrsz;
+
+	sock* out_binding;
+	int* out_binding_sfd;
+	bool* out_binding_created;
+
+	// 0 Not started.
+	// 1 Accepting
+	// 2 Accept success.
+	// 3 Accept failed.
+	int status;
+	gerrno errcode;
+
+	void update();
+};
+
+void NBAcceptResult::_impl::update()
+{
+	if (status > 1) return;
+
+	int ret;
+	if (isv4)
+	{
+		ret = accept(sfd, (sockaddr*)&saddr, &saddrsz);
+	}
+	else
+	{
+		ret = accept(sfd, (sockaddr*)&saddr6, &saddrsz);
+	}
+
+	if (ret >= 0)
+	{
+		*out_binding_sfd = sfd;
+		*out_binding_created = true;
+		status = 2;
+	}
+	else // ret == -1
+	{
+		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
+		errcode = err;
+		if (err == gerrno::InProgress || err == gerrno::WouldBlock || err == gerrno::Already)
+		{
+			status = 1;
+		}
+		else
+		{
+			status = 3;
+		}
+	}
+
+	myliblog("NBAcceptResult status updated to %d\n", status);
+}
+
+NBAcceptResult::NBAcceptResult() : _sp(new _impl)
+{
+	_sp->status = 0;
+}
+
+bool NBAcceptResult::isFinished()
+{
+	_sp->update();
+	return (_sp->status > 1);
+}
+
+bool NBAcceptResult::isSuccess()
+{
+	return (_sp->status == 2);
+}
+
+sock& NBAcceptResult::get()
+{
+	return *(_sp->out_binding);
+}
+
+gerrno NBAcceptResult::getErrCode()
+{
+	return _sp->errcode;
+}
+
 int serversock::accept(sock& _out_s)
 {
     if( (!_vp->created) || (_out_s._vp->created) )
@@ -1041,6 +1128,37 @@ int serversock::accept(sock& _out_s)
         _out_s=std::move(s);
         return GSOCK_OK;
     }
+}
+
+NBAcceptResult serversock::accept_nb(sock& _out_s)
+{
+	NBAcceptResult res;
+	if ((!_vp->created) || (_out_s._vp->created))
+	{
+		/// _out_s has been connected.
+		res._sp->status = 3;
+		res._sp->errcode = (gerrno)GSOCK_INVALID_SOCKET;
+		return res;
+	}
+
+	res._sp->sfd = _vp->sfd;
+	res._sp->out_binding = &_out_s;
+	res._sp->out_binding_sfd = &(_out_s._vp->sfd);
+	res._sp->out_binding_created = &(_out_s._vp->created);
+	if (_pp->protocol == AF_INET)
+	{
+		res._sp->isv4 = true;
+		res._sp->saddrsz = sizeof(res._sp->saddr);
+		res._sp->update();	
+	}
+	else
+	{
+		res._sp->isv4 = false;
+		res._sp->saddrsz = sizeof(res._sp->saddr6);
+		res._sp->update();
+	}
+
+	return res;	
 }
 
 struct udpsock::_impl
