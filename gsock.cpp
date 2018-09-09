@@ -111,15 +111,80 @@ static inline const char* get_family_name(int family)
 	}
 }
 
+int GetNativeErrCode()
+{
+#ifdef _WIN32
+	return WSAGetLastError();
+#else
+	return errno;
+#endif
+}
+
+// Internal Socket Call Errcode
+enum gerrno
+{
+	UnknownError = -1,
+	OK,
+	WouldBlock,
+	InProgress,
+	Already,
+	IsConnected,
+};
+
+gerrno TranslateNativeErrToGErr(int native_errcode)
+{
+	switch (native_errcode)
+	{
+#ifdef _WIN32
+	case WSAEWOULDBLOCK:
+		return gerrno::WouldBlock;
+	case WSAEINPROGRESS:
+		return gerrno::InProgress;
+	case WSAEALREADY:
+		return gerrno::Already;
+	case WSAEISCONN:
+		return gerrno::IsConnected;
+#else
+	case EWOULDBLOCK:
+		return gerrno::WouldBlock;
+	case EINPROGRESS:
+		return gerrno::InProgress;
+	case EALREADY:
+		return gerrno::Already;
+	case EISCONN:
+		return gerrno::IsConnected;
+#endif
+	default:
+		myliblog("Unknown Error Code: %d\n", native_errcode);
+		return gerrno::UnknownError;
+	}
+}
+
 struct vsock::_impl
 {
 	int sfd;
 	bool created;
+	bool nonblocking;
+
+	// Does not set "nonblocking" flag.
+	int doSetNonblocking()
+	{
+		u_long mode = 1;
+		if (ioctlsocket(sfd, FIONBIO, &mode) == 0)
+		{
+			return 0;
+		}
+		else
+		{
+			return -1;
+		}
+	}
 };
 
 vsock::vsock() : _vp(new _impl)
 {
 	_vp->created=false;
+	_vp->nonblocking = false;
 }
 
 vsock::vsock(vsock&& v)
@@ -134,6 +199,37 @@ vsock& vsock::operator = (vsock&& v)
 	_vp=v._vp;
 	v._vp=nullptr;
 	return *this;
+}
+
+int vsock::setNonblocking()
+{
+	if (!_vp->nonblocking)
+	{
+		if (_vp->created)
+		{
+			if (_vp->doSetNonblocking() == 0)
+			{
+				_vp->nonblocking = true;
+				return 0;
+			}
+			else
+			{
+				// Failed to set non-blocking.
+				return -1;
+			}
+		}
+		else
+		{
+			// Socket is not created yet. Just mark it.
+			_vp->nonblocking = true;
+			return 0;
+		}
+	}
+	else
+	{
+		// Socket is already in non-blocking mode.
+		return 0;
+	}
 }
 
 vsock::~vsock()
@@ -155,10 +251,44 @@ vsock::~vsock()
 
 struct sock::_impl
 {
+	static int create_socket(vsock::_impl* _vp, int af_protocol);
+
 	static int connect_ipv4(vsock::_impl* _vp,const std::string& IPStr, int Port);
 	static int connect_ipv6(vsock::_impl* _vp,const std::string& IPStr, int Port);
+
+	static int connect_real(vsock::_impl* _vp, int af_protocol, const sockaddr* paddr, int size);
 };
 
+// static
+int sock::_impl::create_socket(vsock::_impl* _vp, int af_protocol)
+{
+	// If socket is not created, then create it.
+	if (!_vp->created)
+	{
+		_vp->sfd = socket(af_protocol, SOCK_STREAM, 0);
+		if (_vp->sfd < 0)
+		{
+			myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
+			return GSOCK_ERROR_CREAT;
+		}
+		if (_vp->nonblocking && _vp->doSetNonblocking() != 0)
+		{
+			myliblog("Failed to set socket to nonblocking with _vp %p\n", _vp);
+			// close this socket to avoid fd leak.
+			closesocket(_vp->sfd);
+			return GSOCK_ERROR_SETMODE;
+		}
+
+		myliblog("Socket <%s> created: [%d] with _vp %p. %s\n",
+			(af_protocol == AF_INET ? "IPv4" : "IPv6"),
+			_vp->sfd, _vp, (_vp->nonblocking ? "NonBlocking" : "Blocking"));
+		_vp->created = true;
+	}
+
+	return 0;
+}
+
+// static
 int sock::_impl::connect_ipv4(vsock::_impl* _vp, const std::string& IPStr, int Port)
 {
 	struct sockaddr_in saddr;
@@ -171,21 +301,11 @@ int sock::_impl::connect_ipv4(vsock::_impl* _vp, const std::string& IPStr, int P
 	saddr.sin_port = htons(Port);
 	saddr.sin_family = AF_INET;
 
-	// Create socket
-	_vp->sfd = socket(AF_INET, SOCK_STREAM, 0);
-	if (_vp->sfd<0)
-	{
-		myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
-		return GSOCK_ERROR_CREAT;
-	}
-
-	myliblog("Socket <IPv4> created: [%d] with _vp %p\n", _vp->sfd, _vp);
-	_vp->created = true;
-
 	// only returns -1 or 0
-	return ::connect(_vp->sfd, (sockaddr*)&saddr, sizeof(saddr));
+	return connect_real(_vp, AF_INET, (sockaddr*)&saddr, sizeof(saddr));
 }
 
+// static
 int sock::_impl::connect_ipv6(vsock::_impl* _vp, const std::string& IPStr, int Port)
 {
 	struct sockaddr_in6 saddr;
@@ -198,28 +318,32 @@ int sock::_impl::connect_ipv6(vsock::_impl* _vp, const std::string& IPStr, int P
 	saddr.sin6_port = htons(Port);
 	saddr.sin6_family = AF_INET6;
 
+	// only returns -1 or 0
+	return connect_real(_vp, AF_INET6, (sockaddr*)&saddr, sizeof(saddr));
+}
+
+// static
+int sock::_impl::connect_real(vsock::_impl* _vp, int af_protocol, const sockaddr* paddr, int namelen)
+{
 	// Create socket
-	_vp->sfd = socket(AF_INET6, SOCK_STREAM, 0);
-	if (_vp->sfd<0)
-	{
-		myliblog("socket() returns %d. WSAGetLastError: %d\n", _vp->sfd, WSAGetLastError());
-		return GSOCK_ERROR_CREAT;
-	}
-
-	myliblog("Socket <IPv6> created: [%d] with _vp %p\n", _vp->sfd, _vp);
-	_vp->created = true;
-
-	return ::connect(_vp->sfd, (sockaddr*)&saddr, sizeof(saddr));
+	int ret = create_socket(_vp, af_protocol);
+	if (ret != 0) return ret;
+	return ::connect(_vp->sfd, paddr, namelen);
 }
 
 int sock::connect(const std::string& IPStr,int Port)
 {
     myliblog("sock::connect() %p\n",this);
 
-    if(_vp->created)
-    {
-        return GSOCK_INVALID_SOCKET;
-    }
+	if (_vp->nonblocking)
+	{
+		return GSOCK_MISMATCH_MODE;
+	}
+
+	if (_vp->created)
+	{
+		return GSOCK_INVALID_SOCKET;
+	}
 
 	if (IPStr.find(":") != std::string::npos)
 	{
@@ -231,6 +355,162 @@ int sock::connect(const std::string& IPStr,int Port)
 		// Maybe IPv4
 		return sock::_impl::connect_ipv4(_vp, IPStr, Port);
 	}
+}
+
+struct NBConnectResult::_impl
+{
+	int sfd;
+	struct sockaddr_in saddr;
+	struct sockaddr_in6 saddr6;
+	bool isv4;
+	// 0: Not used.
+	// 1: running
+	// 2: finished, connected.
+	// 3: finished, failed. 
+	int status;
+
+	int errcode;
+
+	void update();
+};
+
+void NBConnectResult::_impl::update()
+{
+	// Already finished.
+	if (status > 1) return;
+
+	int ret;
+	if (isv4)
+	{
+		ret = connect(sfd, (sockaddr*)&saddr, sizeof(saddr));
+	}
+	else
+	{
+		ret = connect(sfd, (sockaddr*)&saddr6, sizeof(saddr6));
+	}
+
+	if (ret == 0)
+	{
+		status = 2;
+	}
+	else
+	{
+		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
+		if (err == gerrno::InProgress || err == gerrno::WouldBlock || err == gerrno::Already)
+		{
+			status = 1;
+		}
+		else if (err == gerrno::IsConnected)
+		{
+			status = 2;
+		}
+		else
+		{
+			status = 3;
+		}
+	}
+
+	myliblog("Status updated to %d\n", status);
+}
+
+NBConnectResult::NBConnectResult() : _p(new _impl)
+{
+	_p->status = 0;
+}
+
+bool NBConnectResult::isFinished()
+{
+	_p->update();
+	return (_p->status > 1);
+}
+
+bool NBConnectResult::isConnected()
+{
+	_p->update();
+	return (_p->status == 2);
+}
+
+int NBConnectResult::getErrCode()
+{
+	return _p->errcode;
+}
+
+void NBConnectResult::wait()
+{
+	while (!isFinished());
+}
+
+struct NBTransferResult::_impl
+{
+	int sfd;
+	void* ptr;
+	int datasz;
+
+	int errcode;
+};
+
+NBTransferResult::NBTransferResult() : _p(new _impl)
+{
+
+}
+
+NBConnectResult sock::connect_nb(const std::string& IPStr, int Port)
+{
+	NBConnectResult res;
+	int xret;
+
+	if (IPStr.find(":") != std::string::npos)
+	{
+		// Maybe IPv6
+		memset(&(res._p->saddr6), 0, sizeof(res._p->saddr6));
+		if (inet_pton(AF_INET6, IPStr.c_str(), &(res._p->saddr6.sin6_addr)) != 1)
+		{
+			// Failed.
+			res._p->status = 3;
+			res._p->errcode = GSOCK_INVALID_IP;
+			return res;
+		}
+		res._p->saddr6.sin6_port = htons(Port);
+		res._p->saddr6.sin6_family = AF_INET6;
+
+		res._p->isv4 = false;
+		xret = _impl::connect_real(_vp, AF_INET6, (sockaddr*)&(res._p->saddr6), sizeof(res._p->saddr6));
+		res._p->sfd = _vp->sfd;
+	}
+	else
+	{
+		// Maybe IPv4
+		memset(&(res._p->saddr), 0, sizeof(res._p->saddr));
+		if (inet_pton(AF_INET, IPStr.c_str(), &(res._p->saddr.sin_addr.s_addr)) != 1)
+		{
+			// Failed.
+			res._p->status = 3;
+			res._p->errcode = GSOCK_INVALID_IP;
+			return res;
+		}
+		res._p->saddr.sin_port = htons(Port);
+		res._p->saddr.sin_family = AF_INET;
+
+		res._p->isv4 = true;
+		xret = _impl::connect_real(_vp, AF_INET, (sockaddr*)&(res._p->saddr), sizeof(res._p->saddr));
+		res._p->sfd = _vp->sfd;
+	}
+
+	if (xret == 0)
+	{
+		res._p->status = 2; // Socket is connected immediately! Amazing!!
+	}
+	else if (xret == -1)
+	{
+		res._p->status = 1;
+	}
+	else
+	{
+		// Failed
+		res._p->status = 3;
+		res._p->errcode = xret;
+	}
+	return res;
 }
 
 int sock::send(const void* Buffer,int Length)

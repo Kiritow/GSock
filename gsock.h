@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <memory>
 
 int InitNativeSocket();
 
@@ -23,10 +24,14 @@ enum
 	GSOCK_ERROR_NTOP = -6, // inet_ntop failed.
     GSOCK_MISMATCH_PROTOCOL = -7, // Protocol mismatch.
     GSOCK_BAD_PROTOCOL = -8, // Bad protocol. 
+	GSOCK_ERROR_SETMODE = -9, // Failed to set nonblocking
+	GSOCK_MISMATCH_MODE = -10, // Example: calling blocking method on a non-blocking socket. 
 };
 
 class vsock
 {
+public:
+	int setNonblocking();
 protected:
     vsock();
     vsock(const vsock&)=delete;
@@ -48,6 +53,40 @@ protected:
 #endif
 };
 
+class NBConnectResult
+{
+public:
+	NBConnectResult();
+
+	bool isFinished();
+	// Wait until the connection is finished. (via while loop)
+	void wait();
+	bool isConnected();
+	// ErrCode is only usable when the connection is finished and failed.
+	int getErrCode();
+private:
+	struct _impl;
+	std::shared_ptr<_impl> _p;
+
+	friend class sock;
+};
+
+class NBTransferResult
+{
+public:
+	NBTransferResult();
+
+	bool isFinished();
+	int getBytesDone();
+
+	int getErrCode();
+private:
+	struct _impl;
+	std::shared_ptr<_impl> _p;
+
+	friend class sock;
+};
+
 class sock : public vsock
 {
 public:
@@ -57,12 +96,16 @@ public:
     // GSOCK_INVALID_SOCKET: This socket has been connected before.
     // GSOCK_ERROR_CREAT
 	// GSOCK_INVALID_IP
+	// GSOCK_ERROR_SETMODE: Failed to set socket to non-blocking.
     int connect(const std::string& IPStr,int Port);
+	NBConnectResult connect_nb(const std::string& IPStr, int Port);
 
     // Return:
     // return what send() and recv() call returns.
     int send(const void* Buffer,int Length);
 	int recv(void* Buffer, int MaxToRecv);
+	NBTransferResult send_nb(const void* Buffer, int Length);
+	NBTransferResult recv_nb(void* Buffer, int MaxToRecv);
 
     // Return:
     // GSOCK_OK
