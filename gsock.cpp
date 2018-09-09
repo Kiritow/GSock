@@ -56,27 +56,37 @@ using BYTE = unsigned char;
 #include <stdexcept>
 #include <vector>
 
+int InitNativeSocket()
+{
+	myliblog("sockaddr %d sockaddr_in %d sockaddr_in6 %d\n", sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6));
+	/// Windows Platform need WinSock2.DLL initialization.
+#ifdef _WIN32
+	WORD wd;
+	WSAData wdt;
+	wd = MAKEWORD(2, 2);
+	int ret = WSAStartup(wd, &wdt);
+
+	myliblog("WSAStartup() Returns: %d\n", ret);
+
+	if (ret < 0)
+	{
+		myliblog("WSAGetLastError: %d\n", WSAGetLastError());
+		return -1;
+	}
+#endif
+
+	return 0;
+}
+
 class _init_winsock2_2_class
 {
 public:
     _init_winsock2_2_class()
     {
-		myliblog("sockaddr %d sockaddr_in %d sockaddr_in6 %d\n", sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6));
-        /// Windows Platform need WinSock2.DLL initialization.
-#ifdef _WIN32
-        WORD wd;
-        WSAData wdt;
-        wd=MAKEWORD(2,2);
-        int ret=WSAStartup(wd,&wdt);
-
-        myliblog("WSAStartup() Returns: %d\n",ret);
-
-        if(ret<0)
-        {
-            myliblog("WSAGetLastError: %d\n",WSAGetLastError());
-            throw std::runtime_error("Unable to load winsock2.dll. ");
-        }
-#endif
+		if (InitNativeSocket() < 0)
+		{
+			throw std::runtime_error("Unable to Initialize native socket libray.");
+		}
     }
     ~_init_winsock2_2_class()
     {

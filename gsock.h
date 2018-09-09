@@ -10,6 +10,8 @@
 #include <string>
 #include <vector>
 
+int InitNativeSocket();
+
 enum
 {
 	GSOCK_OK = 0,
@@ -247,6 +249,7 @@ public:
     // Call handle() to handle events
 	int wait(int timeout);
 
+	// callback: void event_handler(vsock& s,int event)
 	void handle(const std::function<void(vsock&,int)>& callback);
 
     ~epoll();
