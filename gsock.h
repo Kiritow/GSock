@@ -49,6 +49,7 @@ class vsock
 {
 public:
 	int setNonblocking();
+	bool isNonblocking();
 protected:
     vsock();
     vsock(const vsock&)=delete;

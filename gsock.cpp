@@ -235,6 +235,11 @@ int vsock::setNonblocking()
 	}
 }
 
+bool vsock::isNonblocking()
+{
+	return _vp->nonblocking;
+}
+
 vsock::~vsock()
 {
 	if(_vp)
@@ -1040,7 +1045,8 @@ void NBAcceptResult::_impl::update()
 
 	if (ret >= 0)
 	{
-		*out_binding_sfd = sfd;
+		// This is a BUG!! Fixed.
+		*out_binding_sfd = ret;
 		*out_binding_created = true;
 		status = 2;
 	}
