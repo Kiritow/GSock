@@ -1723,12 +1723,9 @@ int epoll::mod(vsock& v, int event)
 	ev.data.ptr = &v;
 	return epoll_ctl(_fd, EPOLL_CTL_MOD, v._vp->sfd, &ev);
 }
-int epoll::del(vsock& v, int event)
+int epoll::del(vsock& v)
 {
-	struct epoll_event ev;
-	ev.events = event;
-	ev.data.ptr = &v;
-	return epoll_ctl(_fd, EPOLL_CTL_DEL, v._vp->sfd, &ev);
+	return epoll_ctl(_fd, EPOLL_CTL_DEL, v._vp->sfd, NULL);
 }
 int epoll::wait(int timeout)
 {

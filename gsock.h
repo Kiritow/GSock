@@ -354,9 +354,10 @@ class epoll
 public:
     epoll(int MaxListen);
     // EPOLLIN, EPOLLOUT, ...
+	// Use EPOLLET to set Edge Trigger Mode
     int add(vsock& v,int event);
     int mod(vsock& v,int event);
-    int del(vsock& v,int event);
+	int del(vsock& v);
 
     // >0: Event counts.
     // =0: Timeout.
