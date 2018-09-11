@@ -94,6 +94,8 @@ class NBSendResult
 public:
 	NBSendResult();
 
+	void setStopAtEdge(bool flag);
+
 	// Is the operation finished.
 	bool isFinished();
 

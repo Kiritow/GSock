@@ -456,6 +456,11 @@ struct NBSendResult::_impl
 	int total;
 	int done;
 
+	// When work together with epoll at ET mode, 
+	//   setting this flag can avoid infinite EAGAIN send loop. 
+	//   (caused by buffer full or something else)
+	bool stopAtEdge;
+
 	// 0: Not started.
 	// 1: Data is being sent
 	// 2: Data sent without error.
@@ -496,7 +501,14 @@ void NBSendResult::_impl::update()
 
 		if (err == gerrno::WouldBlock)
 		{
-			status = 1;
+			if (stopAtEdge)
+			{
+				status = 2;
+			}
+			else
+			{
+				status = 1;
+			}
 		}
 		else
 		{
@@ -510,6 +522,11 @@ void NBSendResult::_impl::update()
 NBSendResult::NBSendResult() : _p(new _impl)
 {
 	_p->status = 0;
+}
+
+void NBSendResult::setStopAtEdge(bool flag)
+{
+	_p->stopAtEdge = true;
 }
 
 bool NBSendResult::isFinished()
