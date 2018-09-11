@@ -503,7 +503,7 @@ void NBSendResult::_impl::update()
 		{
 			if (stopAtEdge)
 			{
-				status = 2;
+				status = 3;
 			}
 			else
 			{
@@ -607,7 +607,7 @@ void NBRecvResult::_impl::update()
 		{
 			if (stopAtEdge)
 			{
-				status = 2;
+				status = 3;
 			}
 			else
 			{
