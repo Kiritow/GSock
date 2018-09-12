@@ -522,6 +522,7 @@ void NBSendResult::_impl::update()
 NBSendResult::NBSendResult() : _p(new _impl)
 {
 	_p->status = 0;
+	_p->stopAtEdge = false;
 }
 
 void NBSendResult::setStopAtEdge(bool flag)
@@ -626,6 +627,7 @@ void NBRecvResult::_impl::update()
 NBRecvResult::NBRecvResult() : _p(new _impl)
 {
 	_p->status = 0;
+	_p->stopAtEdge = false;
 }
 
 void NBRecvResult::setStopAtEdge(bool flag)
@@ -1026,6 +1028,8 @@ struct NBAcceptResult::_impl
 {
 	int sfd;
 
+	bool stopAtEdge;
+
 	// For client use
 	bool isv4;
 	sockaddr_in saddr;
@@ -1071,9 +1075,20 @@ void NBAcceptResult::_impl::update()
 	{
 		gerrno err = TranslateNativeErrToGErr(GetNativeErrCode());
 		errcode = err;
-		if (err == gerrno::InProgress || err == gerrno::WouldBlock || err == gerrno::Already)
+		if (err == gerrno::InProgress || err == gerrno::Already)
 		{
 			status = 1;
+		}
+		else if (err == gerrno::WouldBlock)
+		{
+			if (stopAtEdge)
+			{
+				status = 3;
+			}
+			else
+			{
+				status = 1;
+			}
 		}
 		else
 		{
@@ -1087,6 +1102,12 @@ void NBAcceptResult::_impl::update()
 NBAcceptResult::NBAcceptResult() : _sp(new _impl)
 {
 	_sp->status = 0;
+	_sp->stopAtEdge = false;
+}
+
+void NBAcceptResult::stopAtEdge(bool flag)
+{
+	_sp->stopAtEdge = flag;
 }
 
 bool NBAcceptResult::isFinished()

@@ -187,6 +187,8 @@ class NBAcceptResult
 public:
 	NBAcceptResult();
 
+	void stopAtEdge(bool flag);
+
 	bool isFinished();
 	bool isSuccess();
 
