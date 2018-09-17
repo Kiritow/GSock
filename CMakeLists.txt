@@ -1,0 +1,1 @@
+add_library(GSock gsock.cpp gsock_helper.cpp)
