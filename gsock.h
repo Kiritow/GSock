@@ -245,6 +245,48 @@ private:
 	_impl* _pp;
 };
 
+// Experimental
+// SSL/TLS Socket (Powered by OpenSSL)
+// WARNING: Not compatible with non-blocking yet. So...
+//     Don't set sslsock or sslserversock to non-blocking mode.
+//     Don't call _nb methods on sslsock and sslserversock.
+
+constexpr int GSOCK_SSL_BEFORE_ERROR = -21;
+constexpr int GSOCK_SSL_OPREATION_ERROR = -22;
+
+class sslsock : public sock
+{
+public:
+	sslsock();
+	~sslsock();
+	// Returns:
+	// returns what sock::connect() returns.
+	// Additional:
+	// GSOCK_SSL_BEFORE_ERROR (-21) Error happens before ssl connection is started.
+	// GSOCK_SSL_OPREATION_ERROR (-22) Error happens while setup ssl connection.
+	int connect(const std::string& IPStr, int Port);
+	int send(const void* Buffer, int Length);
+	int recv(void* Buffer, int MaxToRecv);
+private:
+	struct _impl;
+	_impl* _pp;
+	friend class sslserversock;
+};
+
+class sslserversock : public serversock
+{
+public:
+	sslserversock();
+	~sslserversock();
+	// Must be called before accept any connection.
+	int loadCertificate(const std::string& filename);
+	int loadPrivateKey(const std::string& filename);
+	int accept(sslsock& _out_s);
+private:
+	struct _impl;
+	_impl* _pp;
+};
+
 class udpsock : public vsock
 {
 public:

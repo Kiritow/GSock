@@ -56,6 +56,10 @@ using BYTE = unsigned char;
 #include <stdexcept>
 #include <vector>
 
+// OpenSSL support
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
 int InitNativeSocket()
 {
 	myliblog("sockaddr %d sockaddr_in %d sockaddr_in6 %d\n", sizeof(sockaddr), sizeof(sockaddr_in), sizeof(sockaddr_in6));
@@ -1203,6 +1207,144 @@ NBAcceptResult serversock::accept_nb(sock& _out_s)
 	}
 
 	return res;	
+}
+
+struct sslsock::_impl
+{
+	_impl();
+
+	const SSL_METHOD* method;
+	SSL_CTX* ctx;
+	SSL* ssl;
+	// Internal flag.
+	bool _ready;
+
+	void init();
+	void dispose();
+};
+
+sslsock::_impl::_impl()
+{
+	_ready = false;
+}
+
+void sslsock::_impl::init()
+{
+	if (!_ready)
+	{
+		method = TLS_client_method();
+		ctx = SSL_CTX_new(method);
+		ssl = SSL_new(ctx);
+		_ready = true;
+	}
+}
+
+void sslsock::_impl::dispose()
+{
+	if (_ready)
+	{
+		SSL_shutdown(ssl);
+		SSL_free(ssl);
+		SSL_CTX_free(ctx);
+		_ready = false;
+	}
+}
+
+sslsock::sslsock() : _pp(new _impl)
+{
+	
+}
+
+sslsock::~sslsock()
+{
+	if (_pp)
+	{
+		_pp->dispose();
+
+		delete _pp;
+		_pp = nullptr;
+	}
+}
+
+int sslsock::connect(const std::string& IPStr, int Port)
+{
+	int ret = sock::connect(IPStr, Port);
+	if (ret < 0) return ret;
+
+	_pp->init();
+	if (SSL_set_fd(_pp->ssl, _vp->sfd) < 0)
+	{
+		return GSOCK_SSL_BEFORE_ERROR;
+	}
+	if (SSL_connect(_pp->ssl) < 0)
+	{
+		return GSOCK_SSL_OPREATION_ERROR;
+	}
+	return 0;
+}
+
+int sslsock::send(const void* Buffer, int Length)
+{
+	return SSL_write(_pp->ssl, Buffer, Length);
+}
+
+int sslsock::recv(void* Buffer, int MaxToRecv)
+{
+	return SSL_read(_pp->ssl, Buffer, MaxToRecv);
+}
+
+struct sslserversock::_impl
+{
+	const SSL_METHOD* method;
+	SSL_CTX* ctx;
+};
+
+sslserversock::sslserversock() : _pp(new _impl)
+{
+	_pp->method = TLS_client_method();
+	_pp->ctx = SSL_CTX_new(_pp->method);
+}
+
+sslserversock::~sslserversock()
+{
+	if (_pp)
+	{
+		SSL_CTX_free(_pp->ctx);
+
+		delete _pp;
+		_pp = nullptr;
+	}
+}
+
+int sslserversock::loadCertificate(const std::string& filename)
+{
+	// Not clear yet.
+	return SSL_CTX_use_certificate_file(_pp->ctx, filename.c_str(), SSL_FILETYPE_PEM);
+}
+
+int sslserversock::loadPrivateKey(const std::string& filename)
+{
+	return SSL_CTX_use_PrivateKey_file(_pp->ctx, filename.c_str(), SSL_FILETYPE_PEM);
+}
+
+int sslserversock::accept(sslsock& _out_s)
+{
+	int ret = serversock::accept(_out_s);
+	if (ret < 0) return ret;
+	SSL* ssl = SSL_new(_pp->ctx);
+	if (SSL_set_fd(ssl, _out_s._vp->sfd) < 0)
+	{
+		return GSOCK_SSL_BEFORE_ERROR;
+	}
+	if (SSL_accept(ssl) < 0)
+	{
+		return GSOCK_SSL_OPREATION_ERROR;
+	}
+	_out_s._pp->ctx = nullptr;
+	_out_s._pp->method = nullptr;
+	_out_s._pp->ssl = ssl;
+	_out_s._pp->_ready = true;
+	return 0;
 }
 
 struct udpsock::_impl
