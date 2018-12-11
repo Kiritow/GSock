@@ -7,6 +7,11 @@
 
 #include "gsock.h"
 
+// C++ version check
+#if __cplusplus<201103L
+#error "GSock requires at least C++11 to compile."
+#endif
+
 #ifdef GSOCK_DEBUG
 #pragma message("GSock Debug mode compiled in")
 #include <cstdio>
@@ -1355,7 +1360,8 @@ static int convertback_ipv46(const sockaddr* paddr, std::string& _out_IPStr)
 	char buff[128] = { 0 };
 	if (paddr->sa_family == AF_INET)
 	{
-		if (inet_ntop(AF_INET, &(((const sockaddr_in*)paddr)->sin_addr), buff, 128)!=NULL)
+		// Change to non-const pointer to avoid compile error in Codeblocks.
+		if (inet_ntop(AF_INET, (void*)&(((const sockaddr_in*)paddr)->sin_addr), buff, 128)!=NULL)
 		{
 			_out_IPStr = std::move(std::string(buff));
 			return 0;
@@ -1364,7 +1370,8 @@ static int convertback_ipv46(const sockaddr* paddr, std::string& _out_IPStr)
 	}
 	else if (paddr->sa_family == AF_INET6)
 	{
-		if (inet_ntop(AF_INET6, &(((const sockaddr_in6*)paddr)->sin6_addr), buff, 128) != NULL)
+		// Change to non-const pointer to avoid compile error in Codeblocks.
+		if (inet_ntop(AF_INET6, (void*)&(((const sockaddr_in6*)paddr)->sin6_addr), buff, 128) != NULL)
 		{
 			_out_IPStr = std::move(std::string(buff));
 			return 1;

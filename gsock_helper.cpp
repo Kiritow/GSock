@@ -6,9 +6,15 @@
 #include "gsock_helper.h"
 #include <cstring>
 
+// C++ version check
+#if __cplusplus<201103L
+#error "GSock requires at least C++11 to compile."
+#endif
+
 #ifdef _WIN32
-/// Using Win8.1
-#define _WIN32_WINNT 0x0603
+// See gsock.cpp for more information on _WIN32_WINNT.
+// Using Win10 by default.
+#define _WIN32_WINNT 0x0A00
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #ifdef _MSC_VER
