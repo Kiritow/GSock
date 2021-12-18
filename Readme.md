@@ -16,6 +16,10 @@ int main()
 {
     int ret;
     std::string ip;
+
+    // Initiate Socket Handler
+    InitNativeSocket();
+
     if ((ret = DNSResolve("kiritow.com", ip)) < 0)
     {
         printf("Failed to resolve ip address. (%d)\n", ret);
@@ -72,6 +76,10 @@ void service_main(sock& s)
 
 int main()
 {
+
+    // Initiate Socket Handler
+    InitNativeSocket();
+
     serversock t;
     if (t.bind(59123) < 0 || t.listen(10) < 0)
     {
